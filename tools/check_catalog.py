@@ -20,7 +20,7 @@ def cari_katalog_produk(kata_kunci: str) -> str:
             "match_documents", # Pastikan pakai 's' atau tidak, sesuai database kamu
             {"query_embedding": vektor_string, "match_count": 3}
         ).execute()
-        a
+        
         data = response.data
         if not data:
             return f"Maaf, tidak ditemukan data yang relevan dengan '{kata_kunci}'."
