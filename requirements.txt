@@ -1,0 +1,13 @@
+langchain>=0.2.0
+langchain-core>=0.2.0
+langchain-google-genai>=1.0.3
+langchain-community>=0.2.0
+langchain-chroma>=0.1.4
+langchain-huggingface>=0.0.1
+sentence-transformers>=3.0.0
+supabase>=2.4.5
+python-dotenv>=1.0.1
+fastapi>=0.110.1
+uvicorn>=0.29.0
+pydantic>=2.7.0
+langgraph>=0.1.0
