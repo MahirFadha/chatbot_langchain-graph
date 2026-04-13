@@ -15,7 +15,7 @@ def run_cli_mode():
     
     while True:
         user_input = input("Pelanggan: ")
-        if user_input.lower() in ['keluar', 'exit', 'quit']:
+        if user_input.lower() in ['keluar', 'exit', 'quit','q']:
             print("Mematikan agen...")
             break
             
