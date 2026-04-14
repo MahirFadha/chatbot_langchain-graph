@@ -1,12 +1,14 @@
 import os
 from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.tools import create_retriever_tool
+from llm.embedding_client import get_embedding_model # <-- IMPORT BARU
 
 def setup_rag_tool():
-    embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    # PANGGIL MODEL DARI PUSAT (Tidak akan load 2x karena sudah di-cache oleh Singleton)
+    embedding_model = get_embedding_model()
+    
     persist_dir_sop = "./chroma_db_sop"
     
     if not os.path.exists(persist_dir_sop):

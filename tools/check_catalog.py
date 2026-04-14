@@ -1,23 +1,22 @@
 from langchain_core.tools import tool
-from langchain_huggingface import HuggingFaceEmbeddings
 from supabase import create_client, Client
 from config.settings import SUPABASE_URL, SUPABASE_KEY
+from llm.embedding_client import get_embedding_model # <-- IMPORT BARU
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# KITA GUNAKAN MODEL YANG SAMA PERSIS DENGAN SAAT KAMU MEMBUAT DATABASE!
-embedding_model = HuggingFaceEmbeddings(model_name="paraphrase-multilingual-mpnet-base-v2")
 
 @tool
 def cari_katalog_produk(kata_kunci: str) -> str:
     """Gunakan tool ini untuk mencari spesifikasi, fitur, detail harga AC, dan layanan Jasa Pasang AC."""
     try:
-        # Ubah teks menjadi vektor (Otomatis akan menjadi 768 dimensi yang benar)
+        # PANGGIL MODEL DARI PUSAT
+        embedding_model = get_embedding_model()
+        
         vektor_query = embedding_model.embed_query(kata_kunci)
         vektor_string = f"[{','.join(map(str, vektor_query))}]"
         
         response = supabase.rpc(
-            "match_documents", # Pastikan pakai 's' atau tidak, sesuai database kamu
+            "match_documents", 
             {"query_embedding": vektor_string, "match_count": 3}
         ).execute()
         
