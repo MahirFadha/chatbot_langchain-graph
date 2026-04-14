@@ -13,7 +13,7 @@ def jalankan_bot():
     
     while True:
         teks_user = input("Pelanggan: ")
-        if teks_user.lower() in ['keluar', 'exit']:
+        if teks_user.lower() in ['keluar', 'exit','q']:
             print("Mematikan sistem...")
             break
             
