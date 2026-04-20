@@ -5,10 +5,11 @@ from graph.state import AgentState
 from llm.gemini_client import get_llm
 from tools.check_catalog import cari_katalog_produk
 from tools.check_order import cek_status_pesanan
-from chains.rag_chains import setup_rag_tool
+from database.vector_manager import inisialisasi_vektor_awal, get_sop_tool
 
 # 1. Kumpulkan semua alat LangChain
-tool_sop = setup_rag_tool()
+inisialisasi_vektor_awal()
+tool_sop = get_sop_tool()
 daftar_tools = [cari_katalog_produk, cek_status_pesanan, tool_sop]
 
 # 2. PEKERJA 1: EKSEKUTOR ALAT

@@ -1,4 +1,28 @@
-Selamat datang di panduan operasional Kampung Ilmu.
-Jam operasional layanan pelanggan adalah 08:00 - 17:00 WIB. 
-Kebijakan Retur: Pembeli dapat mengajukan retur buku maksimal 3 hari setelah status pengiriman "Diterima". Retur hanya berlaku untuk buku yang cacat cetak atau halamannya hilang. Buku bekas tidak dapat diretur.
-Pembayaran: Kami menerima transfer bank, e-wallet (GoPay, OVO, Dana), dan QRIS.
+## 1. Profil & Operasional Dasar
+Tentang Kami: Aire Optima adalah badan usaha yang bergerak di bidang penyediaan produk dan jasa layanan Air Conditioner (AC) serta instalasi CCTV.
+Jam Operasional: Buka setiap hari (Senin - Minggu) selama 24 Jam.
+Cakupan Area Layanan: Meliputi wilayah Surabaya, Gresik, dan Sidoarjo.
+Lokasi Kantor Utama: Jl. Barata Jaya XIX No.57A, Baratajaya, Kec. Gubeng, Surabaya.
+Kontak Resmi: WhatsApp Admin di 087844374323 | Email di aireoptima@gmail.com.
+
+## 2. Alur Pemesanan & Pembayaran
+Alur Pemesanan:
+Pelanggan melakukan konsultasi atau langsung mengajukan permintaan pesanan kepada Bot.
+Bot akan mengumpulkan data detail pesanan. Jika pelanggan adalah pengguna baru, Bot diwajibkan untuk meminta kelengkapan data diri pelanggan terlebih dahulu.
+Setelah seluruh data pesanan dan data diri lengkap, sistem/Bot akan mengirimkan notifikasi kepada Admin manusia.
+Admin manusia akan menghubungi pelanggan melalui WhatsApp untuk melakukan konfirmasi akhir dan penentuan jadwal kedatangan teknisi.
+Metode Pembayaran: Aire mendukung dua sistem pembayaran:
+Pembayaran di Awal: Mendukung metode Transfer Manual, QRIS, dan Multi Payment Online.
+Pembayaran di Akhir: Pembayaran dilakukan setelah jasa/pekerjaan selesai dilakukan oleh teknisi (Postpaid).
+Kebijakan Reschedule & Pembatalan: [Tuliskan di sini: Maksimal H-1 sebelum teknisi datang, atau apakah ada denda pembatalan sepihak di hari H].
+
+## 3. Kebijakan Garansi & Purna Jual
+Garansi Jasa (Servis/Cuci/Pasang): [Tuliskan di sini: Contoh - Garansi cuci AC berlaku selama 7 hari, garansi pasang/bocor berlaku selama 30 hari].
+Garansi Produk: [Tuliskan di sini: Contoh - Unit AC baru mengikuti garansi resmi pabrik, unit CCTV garansi toko 1 tahun].
+Syarat Klaim: [Tuliskan di sini: Contoh - Wajib melampirkan nota digital dari sistem Aire dan merekam video bukti kerusakan].
+
+## 4. Persiapan Layanan & Biaya Tak Terduga (FAQ)
+Persiapan Kedatangan Teknisi: [Tuliskan di sini: Contoh - Harap pastikan ada akses jalan untuk tangga, dan minimal saldo token listrik tersedia].
+Standar Biaya Tambahan (Surcharge):
+Surcharge Jam Malam: Terdapat biaya tambahan sebesar Rp50.000 untuk pengerjaan di luar jam kerja normal (jam malam). (Catatan internal: Nanti pastikan ke manajer, "jam malam" ini mulai dari jam berapa? Misalnya di atas jam 18.00).
+Surcharge Apartemen: Terdapat biaya tambahan untuk pengerjaan di lokasi Apartemen/Rumah Susun karena tingkat kesulitan akses dan perizinan gedung. (Catatan internal: Tuliskan nominal pastinya jika ada).
