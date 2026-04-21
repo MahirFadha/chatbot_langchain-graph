@@ -220,7 +220,7 @@ def jalankan_pencarian_sql(kata_kunci: str):
         ELSE 1
       END,
       skor_total DESC
-    LIMIT 3;
+    LIMIT 5;
     """
     
     hasil_sql = []
@@ -273,7 +273,7 @@ def cari_katalog_produk(kata_kunci: str) -> str:
         
         # 1. AMBIL DARI CHROMA DB (Semantic Search)
         db_katalog = get_vector_katalog_db()
-        hasil_vektor = db_katalog.similarity_search(kata_kunci, k=2) # Ambil 2 teratas
+        hasil_vektor = db_katalog.similarity_search(kata_kunci, k=5) # Ambil 2 teratas
         
         print("\n🔍 [DEBUG 1] HASIL SEMANTIC (CHROMA DB) - TOP 2:")
         if not hasil_vektor:

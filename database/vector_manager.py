@@ -26,7 +26,7 @@ def inisialisasi_vektor_awal():
 def setup_sop_chroma():
     """Membaca file txt, memotong teks, dan menjadikannya Vector DB SOP"""
     embedding_model = get_embedding_model()
-    persist_dir = "./chroma/db_sop"
+    persist_dir = "./database/chroma/db_sop"
     
     if not os.path.exists(persist_dir):
         print("Membangun Vector DB SOP...")
