@@ -238,6 +238,7 @@ def jalankan_pencarian_sql(kata_kunci: str):
             nama = row[1]
             harga = row[2]
             tipe = row[3]
+            id_jasa_bundle = row[4]
             # row[4] adalah id_jasa_bundle, kita lewati karena tidak perlu ditampilkan ke LLM
             jasa_bundle = row[5]
             harga_bundle = row[6]
@@ -245,7 +246,7 @@ def jalankan_pencarian_sql(kata_kunci: str):
             
             teks = f"Nama {str(tipe).capitalize()}: {nama}. Harga: Rp{harga}. "
             if jasa_bundle:
-                teks += f"Jasa Bundling Wajib: {jasa_bundle} (Biaya: Rp{harga_bundle})."
+                teks += f"Jasa Bundling Wajib: [{id_jasa_bundle}] {jasa_bundle} (Biaya: Rp{harga_bundle})."
                 
             hasil_sql.append({
                 "id_referensi": id_ref,
@@ -275,7 +276,7 @@ def cari_katalog_produk(kata_kunci: str) -> str:
         db_katalog = get_vector_katalog_db()
         hasil_vektor = db_katalog.similarity_search(kata_kunci, k=5) # Ambil 2 teratas
         
-        print("\n🔍 [DEBUG 1] HASIL SEMANTIC (CHROMA DB) - TOP 2:")
+        print("\n🔍 [DEBUG 1] HASIL SEMANTIC (CHROMA DB) - TOP 5:")
         if not hasil_vektor:
             print("   (Tidak ada hasil dari AI)")
         for i, doc in enumerate(hasil_vektor):
@@ -286,7 +287,7 @@ def cari_katalog_produk(kata_kunci: str) -> str:
         # 2. AMBIL DARI POSTGRESQL (Lexical/Rule-based Search)
         hasil_sql = jalankan_pencarian_sql(kata_kunci)
         
-        print("\n🔍 [DEBUG 2] HASIL LEXICAL (POSTGRESQL) - TOP 2:")
+        print("\n🔍 [DEBUG 2] HASIL LEXICAL (POSTGRESQL) - TOP 5:")
         if not hasil_sql:
             print("   (Tidak ada hasil dari Database)")
         for i, item in enumerate(hasil_sql):

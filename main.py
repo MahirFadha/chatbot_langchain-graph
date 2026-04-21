@@ -1,18 +1,57 @@
-from graph.builder import rakit_pabrik_cs
+import datetime
 import uuid
+import psycopg2
+from config.settings import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS
+from graph.builder import rakit_pabrik_cs
+
+def simpan_customer_baru(id_waha):
+    """Fungsi sistem untuk memastikan ID WAHA terdaftar di database sebelum chat dimulai"""
+    try:
+        conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=DB_USER, password=DB_PASS)
+        cursor = conn.cursor()
+        
+        # Cek apakah ID sudah ada
+        cursor.execute("SELECT id_customer FROM public.customers WHERE id_customer = %s", (id_waha,))
+        if not cursor.fetchone():
+            waktuSekarang = datetime.datetime.now()
+            # Jika belum ada, Insert data dasar
+            cursor.execute("""
+                INSERT INTO public.customers (id_customer, bot_active, blacklist, total_orders,last_interaction)
+                VALUES (%s, true, false, 0, %s)
+            """, (id_waha,waktuSekarang))
+            conn.commit()
+            print(f"[SYSTEM DB] User baru {id_waha} berhasil didaftarkan di sistem!")
+            
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"[SYSTEM DB ERROR] Gagal inisialisasi customer: {e}")
 
 def jalankan_bot():
     agen = rakit_pabrik_cs()
+    conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=DB_USER, password=DB_PASS)
+    cursor = conn.cursor()
     
-    # ID Sesi KTP Pelanggan untuk memori
-    thread_id = str(uuid.uuid4())
-    config = {"configurable": {"thread_id": thread_id}}
+    # 1. GENERATE ID (Simulasi WAHA ID)
+    # Nanti kalau sudah pakai WAHA, ini diganti dengan ID dari JSON Webhook (misal: 62812xxx@s.whatsapp.net)
+    id_waha_simulasi = f"WAHA-{str(uuid.uuid4())[:8]}" 
     
-    print("\n--- Sesi Chat CS Dimulai ---")
-    print("Ketik 'keluar' untuk menghentikan aplikasi.\n")
+    # 2. DAFTARKAN KE DATABASE SEBELUM MULAI
+    simpan_customer_baru(id_waha_simulasi)
+    
+    # 3. SET CONFIG THREAD ID LANGGRAPH SAMA DENGAN ID WAHA
+    config = {"configurable": {"thread_id": id_waha_simulasi}}
+    
+    print("\n" + "="*50)
+    print("--- Sesi Chat CS Dimulai ---")
+    print(f"ID Customer Aktif : {id_waha_simulasi}")
+    print("Ketik 'keluar' untuk menghentikan aplikasi.")
+    print("="*50 + "\n")
     
     while True:
         teks_user = input("Pelanggan: ")
+        cursor.execute("UPDATE public.customers SET last_interaction = NOW() WHERE id_customer = %s", (id_waha_simulasi,))
+        conn.commit()
         if teks_user.lower() in ['keluar', 'exit','q']:
             print("Mematikan sistem...")
             break
