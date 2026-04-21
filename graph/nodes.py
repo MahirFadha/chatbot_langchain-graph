@@ -6,10 +6,9 @@ from llm.gemini_client import get_llm
 from tools.check_catalog import cari_katalog_produk
 from tools.check_order import cek_status_pesanan
 from tools.order_manager import catat_pesanan_baru
-from database.vector_manager import inisialisasi_vektor_awal, get_sop_tool
+from database.vector_manager import get_sop_tool
 
 # 1. Kumpulkan semua alat LangChain
-inisialisasi_vektor_awal()
 tool_sop = get_sop_tool()
 daftar_tools = [cari_katalog_produk, cek_status_pesanan, catat_pesanan_baru, tool_sop]
 
