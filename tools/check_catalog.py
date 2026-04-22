@@ -1,7 +1,6 @@
-import psycopg2
+from database.koneksi import get_db_connection
 from langchain_core.tools import tool
 from database.vector_manager import get_vector_katalog_db
-from config.settings import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS
 
 def jalankan_pencarian_sql(kata_kunci: str):
     """Menjalankan pencarian Lexical/Rule-based menggunakan Postgres"""
@@ -225,7 +224,7 @@ def jalankan_pencarian_sql(kata_kunci: str):
     
     hasil_sql = []
     try:
-        conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=DB_USER, password=DB_PASS)
+        conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(query_sql, (kata_kunci,))
         rows = cursor.fetchall()
@@ -312,11 +311,11 @@ def cari_katalog_produk(kata_kunci: str) -> str:
                     "teks_gabungan": doc.page_content
                 }
                 
-        # 4. POTONG HASIL GABUNGAN MENJADI MAKSIMAL 2 SAJA
-        # Kita ubah dictionary menjadi list, lalu ambil 2 elemen pertama ([:2])
-        katalog_final_list = list(katalog_final_dict.values())[:2]
+        # 4. POTONG HASIL GABUNGAN MENJADI MAKSIMAL 4 SAJA
+        # (Agar hasil Vektor tidak terbuang jika SQL mendominasi urutan awal)
+        katalog_final_list = list(katalog_final_dict.values())[:4]
         
-        print("\n🔗 [DEBUG 3] HASIL GABUNGAN FINAL (DIPOTONG JADI TOP 2):")
+        print("\n🔗 [DEBUG 3] HASIL GABUNGAN FINAL (DIPOTONG JADI TOP 4):")
         for i, item in enumerate(katalog_final_list):
             print(f"   {i+1}. [{item['id_referensi']}] (Sumber: {item['sumber']})")
         print(f"==================================================\n")

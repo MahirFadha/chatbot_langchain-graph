@@ -1,13 +1,12 @@
 import datetime
 import uuid
-import psycopg2
-from config.settings import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS
+from database.koneksi import get_db_connection
 from graph.builder import rakit_pabrik_cs
 
 def simpan_customer_baru(id_waha):
     """Fungsi sistem untuk memastikan ID WAHA terdaftar di database sebelum chat dimulai"""
     try:
-        conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=DB_USER, password=DB_PASS)
+        conn = get_db_connection()
         cursor = conn.cursor()
         
         # Cek apakah ID sudah ada
@@ -29,7 +28,7 @@ def simpan_customer_baru(id_waha):
 
 def jalankan_bot():
     agen = rakit_pabrik_cs()
-    conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=DB_USER, password=DB_PASS)
+    conn = get_db_connection()
     cursor = conn.cursor()
     
     # 1. GENERATE ID (Simulasi WAHA ID)

@@ -1,11 +1,10 @@
-import psycopg2
-from config.settings import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS
+from database.koneksi import get_db_connection
 
 def cek_izin_dan_update_interaksi(chat_id):
     """Mengecek apakah user boleh dilayani bot (bot_active & blacklist)."""
     diizinkan = True
     try:
-        conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=DB_USER, password=DB_PASS)
+        conn = get_db_connection()
         cursor = conn.cursor()
         
         cursor.execute("SELECT bot_active, blacklist FROM public.customers WHERE id_customer = %s", (chat_id,))

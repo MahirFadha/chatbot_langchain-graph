@@ -1,13 +1,12 @@
 import os
-import psycopg2
 import re
+from database.koneksi import get_db_connection
 from langchain_core.documents import Document
 from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_core.tools import create_retriever_tool
 from llm.embedding_client import get_embedding_model
-from config.settings import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS
 
 # Tambahkan ini di bagian atas file bersama global _embedding_model
 vector_katalog_db = None
@@ -69,9 +68,7 @@ def setup_katalog_chroma():
         
         try:
             # Buka koneksi ke Postgres lokal
-            conn = psycopg2.connect(
-                host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=DB_USER, password=DB_PASS
-            )
+            conn = get_db_connection()
             cursor = conn.cursor()
             
             # ==========================================

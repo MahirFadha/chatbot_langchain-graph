@@ -15,3 +15,7 @@ fastapi
 uvicorn 
 pydantic
 psycopg2-binary
+langgraph-checkpoint-sqlite
+psycopg[binary]
+psycopg_pool
+langgraph-checkpoint-postgres

@@ -1,9 +1,20 @@
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
-
+from langgraph.checkpoint.postgres import PostgresSaver
+from config.settings import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS
+from psycopg_pool import ConnectionPool
 from graph.state import AgentState
 from graph.nodes import node_pemikir, node_eksekutor_alat
 from graph.edges import polisi_cek_kebutuhan_alat
+
+# String koneksi khusus untuk psycopg v3
+DB_URI = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+# Buat kolam koneksi (Connection Pool)
+# Kolam ini akan terus terbuka dan dipakai bergantian oleh agen AI
+pool = ConnectionPool(
+    conninfo=DB_URI,
+    kwargs={"autocommit": True}  # <--- INI OBATNYA!
+)
 
 def rakit_pabrik_cs():
     print("Membangun Cetak Biru (Blueprint) LangGraph...")
@@ -31,9 +42,10 @@ def rakit_pabrik_cs():
     pabrik.add_edge("ruang_tools", "ruang_pemikir")
     
     # 4. Pasang CCTV Memori
-    cctv_memori = MemorySaver()
+    memory = PostgresSaver(pool)
+    memory.setup() # Otomatis membuat tabel jika belum ada
     
     # 5. Resmikan Pabrik!
-    agen_beroperasi = pabrik.compile(checkpointer=cctv_memori)
+    agen_beroperasi = pabrik.compile(checkpointer=memory)
     
     return agen_beroperasi
