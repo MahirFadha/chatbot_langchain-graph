@@ -2,7 +2,8 @@ from utils.security import ubah_status_bot_manual
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 import uvicorn
-import asyncio 
+import asyncio
+import time
 from utils.security import (
     cek_izin_dan_update_interaksi, 
     ubah_status_bot_manual, 
@@ -11,7 +12,7 @@ from utils.security import (
     lihat_daftar_blacklist,
     lihat_pelanggan_bot_nonaktif
 )
-from services.waha_services import waha_sedang_mengetik, waha_kirim_balasan
+from services.waha_services import waha_sedang_mengetik, waha_kirim_balasan, waha_tandai_dibaca
 from graph.builder import rakit_pabrik_cs, tutup_pabrik_cs
 from data.vector_manager import inisialisasi_vektor_awal
 
@@ -38,7 +39,21 @@ async def proses_chat_dari_buffer(chat_id: str):
     pesan_gabungan = ". ".join(data_buffer["messages"])
     
     print(f"\n[BUFFER SELESAI] 📦 Menggabungkan pesan {chat_id}: '{pesan_gabungan}'")
-    # Animasi mengetik
+    # 1. Centang Biru (Tandai dibaca)
+    waha_tandai_dibaca(chat_id)
+
+    # 2. Hitung Jeda Waktu Baca Dinamis
+    # Asumsi: Kecepatan baca manusia rata-rata 4 kata per detik.
+    jumlah_kata = len(pesan_gabungan.split())
+    waktu_baca_kalkulasi = jumlah_kata / 4.0
+
+    # Pasang batas: Minimal 1.5 detik, Maksimal 6.0 detik (agar tidak kelamaan)
+    waktu_jeda = max(1.5, min(waktu_baca_kalkulasi, 6.0))
+
+    print(f"⏱️ [UX] Simulasi membaca {jumlah_kata} kata selama {waktu_jeda:.1f} detik...")
+    time.sleep(waktu_jeda)
+
+    # 3. Pura-pura mulai mengetik...
     waha_sedang_mengetik(chat_id)
 
     # 2. Lempar ke LangGraph (Otak AI)

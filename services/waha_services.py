@@ -16,6 +16,18 @@ def get_headers():
         headers["X-Api-Key"] = WAHA_API_KEY
     return headers
 
+def waha_tandai_dibaca(chat_id: str):
+    """Mengirim status 'Centang Biru' (Read/Seen) ke pelanggan"""
+    try:
+        url = f"{WAHA_URL}/api/sendSeen"
+        payload = {
+            "session": WAHA_SESSION,
+            "chatId": chat_id
+        }
+        requests.post(url, json=payload, headers=get_headers())
+    except Exception as e:
+        print(f"⚠️ Gagal mengirim status Read: {e}")
+
 def waha_sedang_mengetik(chat_id):
     """Memberi tahu WhatsApp agar memunculkan tulisan 'typing...'"""
     try:
