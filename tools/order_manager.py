@@ -193,3 +193,80 @@ def ubah_jadwal_pesanan(order_id: str, jadwal_baru: str, config: RunnableConfig)
         
     except Exception as e:
         return f"GAGAL: Terjadi kesalahan sistem database: {e}"
+
+@tool
+def batalkan_pesanan(order_id: str, alasan_batal: str, config: RunnableConfig) -> str:
+    """
+    Gunakan tool ini HANYA JIKA pelanggan ingin membatalkan pesanan (cancel) 
+    DAN kamu sudah memastikan bahwa permintaannya memenuhi syarat maksimal H-1.
+    Parameter `alasan_batal` diisi dengan alasan kenapa user membatalkan pesanannya.
+    """
+    id_customer_aktif = config.get("configurable", {}).get("thread_id")
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # 1. Pastikan order_id benar dan ambil data untuk notifikasi
+        cursor.execute("""
+            SELECT o.request_service_time, c.real_name, o.order_status 
+            FROM public.orders o
+            JOIN public.customers c ON o.id_customer = c.id_customer
+            WHERE o.order_id = %s AND o.id_customer = %s
+        """, (order_id, id_customer_aktif))
+        row = cursor.fetchone()
+        
+        if not row:
+            return "GAGAL: Nomor Order tidak ditemukan atau pesanan tersebut bukan milik pelanggan ini. Pastikan Nomor Order benar."
+            
+        jadwal_lama = row[0]
+        nama_pelanggan = row[1] if row[1] else "Pelanggan" 
+        status_sekarang = row[2]
+        
+        # Cegah pembatalan ganda
+        if status_sekarang and status_sekarang.lower() in ['cancelled', 'batal']:
+            return "GAGAL: Pesanan ini sudah berstatus batal sebelumnya."
+        
+        # 2. Update status order menjadi "cancelled"
+        cursor.execute("""
+            UPDATE public.orders 
+            SET order_status = 'cancelled' 
+            WHERE order_id = %s
+        """, (order_id,))
+        
+        conn.commit()
+        
+        # 3. Kirim Notif Alarm Batal ke Admin
+        try:
+            from services.waha_services import waha_kirim_balasan
+            from config.settings import NOMOR_WA
+            
+            # Penerjemah Format Jadwal
+            hari_indo = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
+            jadwal_tampil = str(jadwal_lama)
+            try:
+                if isinstance(jadwal_lama, datetime.datetime):
+                    dt_lama = jadwal_lama
+                else:
+                    dt_lama = datetime.datetime.strptime(str(jadwal_lama), "%Y-%m-%d %H:%M:%S")
+                jadwal_tampil = f"{hari_indo[dt_lama.weekday()]}, {dt_lama.strftime('%d-%m-%Y %H:%M')} WIB"
+            except: pass
+            
+            admin_target = str(NOMOR_WA).strip()
+            if admin_target.startswith("0"): admin_target = "62" + admin_target[1:]
+            if not admin_target.endswith("@c.us"): admin_target += "@c.us"
+            
+            # Pesan Notifikasi Cancel
+            pesan_admin = f"❌ *INFO PEMBATALAN PESANAN (CANCEL)* ❌\n\nID: {order_id}\n👤 *Atas Nama: {nama_pelanggan}*\nJadwal Awal: {jadwal_tampil}\n*Alasan Batal: {alasan_batal}*\n\n_Mohon informasikan ke teknisi bahwa pesanan ini BATAL!_"
+            
+            waha_kirim_balasan(admin_target, pesan_admin)
+        except Exception as e:
+            print(f"⚠️ Gagal kirim notif cancel ke admin: {e}")
+            
+        cursor.close()
+        conn.close()
+        
+        return f"SUKSES: Pesanan {order_id} berhasil dibatalkan."
+        
+    except Exception as e:
+        return f"GAGAL: Terjadi kesalahan sistem database: {e}"

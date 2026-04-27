@@ -5,13 +5,13 @@ from graph.state import AgentState
 from llm.gemini_client import get_llm
 from tools.check_catalog import cari_katalog_produk
 from tools.check_order import cek_status_pesanan
-from tools.order_manager import catat_pesanan_baru, ubah_jadwal_pesanan
+from tools.order_manager import catat_pesanan_baru, ubah_jadwal_pesanan, batalkan_pesanan
 from data.vector_manager import get_sop_tool
-from data.database import ambil_data_pelanggan_lama 
+from data.database import ambil_data_pelanggan_lama
 
 # 1. Kumpulkan semua alat LangChain
 tool_sop = get_sop_tool()
-daftar_tools = [cari_katalog_produk, cek_status_pesanan, ubah_jadwal_pesanan, catat_pesanan_baru, tool_sop]
+daftar_tools = [cari_katalog_produk, cek_status_pesanan, catat_pesanan_baru, ubah_jadwal_pesanan, batalkan_pesanan, tool_sop]
 
 # 2. PEKERJA 1: EKSEKUTOR ALAT
 node_eksekutor_alat = ToolNode(daftar_tools)
@@ -104,6 +104,17 @@ Jika user ingin mengubah jadwal pesanan yang sudah dibuat (reschedule):
    - CEK SURCHARGE JADWAL BARU: Jika jam baru yang diminta di atas jam 18.00 (dan sebelumnya bukan jam malam), beritahu ada tambahan "Biaya Jam Malam Rp50.000".
 5. EKSEKUSI TOOL (SANGAT PENTING): KAMU MEMILIKI AKSES ke tool `ubah_jadwal_pesanan`. JANGAN PERNAH beralasan "tidak bisa mengubah secara langsung" atau melempar tugas ke Admin lain! Kamu WAJIB memanggil tool tersebut dengan parameter `jadwal_baru` menggunakan format "YYYY-MM-DD HH:MM:00".
 6. Setelah tool berhasil tereksekusi dan mengembalikan status SUKSES, barulah sampaikan ke pelanggan: "Baik kak, jadwal pesanan sudah kami ubah. Nanti akan dikonfirmasi oleh tim teknisi kedatangannya."
+
+[SOP 5: JALUR PEMBATALAN / CANCEL PESANAN]
+Jika user ingin membatalkan pesanan yang sudah dibuat (cancel):
+1. Tanyakan Nomor Order (contoh: ORD-xxxx) jika user belum menyebutkannya.
+2. WAJIB gunakan tool `cek_status_pesanan` untuk melihat jadwal awal mereka terlebih dahulu.
+3. ATURAN MUTLAK H-1: Pembatalan HANYA BISA dilakukan maksimal 1 hari sebelum jadwal awal. 
+   - Bandingkan TANGGAL jadwal awal pesanan dengan TANGGAL [INFO SISTEM TERKINI] hari ini.
+   - JIKA jadwal awalnya adalah HARI INI (H-0) atau SUDAH LEWAT: KAMU DILARANG KERAS membatalkannya! Tolak dengan sopan: "Mohon maaf kak, untuk pembatalan pesanan maksimal harus dilakukan H-1 sebelum jadwal pengerjaan awal yang disepakati."
+4. JIKA AMAN (H-1 atau lebih): Tanyakan ALASAN pembatalannya dengan ramah. (Contoh: "Boleh diinfokan kak, alasan pembatalannya agar bisa kami catat?").
+5. EKSEKUSI TOOL: Setelah user memberikan alasan, KAMU WAJIB memanggil tool `batalkan_pesanan` dengan parameter `order_id` dan `alasan_batal`. JANGAN beralasan tidak bisa membatalkan secara langsung.
+6. Setelah tool berhasil, sampaikan konfirmasi ramah bahwa pesanan telah dibatalkan di sistem dan berharap bisa melayani mereka kembali di lain waktu.
 """
 
     # ==========================================
