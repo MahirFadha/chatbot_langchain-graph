@@ -13,7 +13,7 @@ from utils.security import (
 )
 from services.waha_services import waha_sedang_mengetik, waha_kirim_balasan
 from graph.builder import rakit_pabrik_cs, tutup_pabrik_cs
-from database.vector_manager import inisialisasi_vektor_awal
+from data.vector_manager import inisialisasi_vektor_awal
 
 agen = None
 

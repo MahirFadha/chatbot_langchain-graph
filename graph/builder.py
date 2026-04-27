@@ -57,8 +57,6 @@ def rakit_pabrik_cs():
     
     return agen_beroperasi
 
-# Di file graph/builder.py
-
 def tutup_pabrik_cs():
     """Fungsi ini dipanggil saat server mati untuk menutup kolam koneksi DB"""
     global pool

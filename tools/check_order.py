@@ -1,4 +1,4 @@
-from database.koneksi import get_db_connection
+from data.database import get_db_connection
 from langchain_core.tools import tool
 
 @tool

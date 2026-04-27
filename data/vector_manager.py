@@ -1,6 +1,6 @@
 import os
 import re
-from database.koneksi import get_db_connection
+from data.database import get_db_connection
 from langchain_core.documents import Document
 from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter

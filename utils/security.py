@@ -1,5 +1,5 @@
 import re
-from database.koneksi import get_db_connection
+from data.database import get_db_connection
 from services.waha_services import waha_kirim_balasan, dapatkan_lid_dari_waha, dapatkan_phone_dari_lid
 
 def cek_izin_dan_update_interaksi(chat_id: str, teks_pesan: str = ""):

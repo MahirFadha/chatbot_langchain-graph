@@ -1,6 +1,6 @@
 import datetime
 import uuid
-from database.koneksi import get_db_connection
+from database.database import get_db_connection
 from graph.builder import rakit_pabrik_cs
 
 def simpan_customer_baru(id_waha):

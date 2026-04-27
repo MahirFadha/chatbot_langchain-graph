@@ -1,6 +1,6 @@
-from database.koneksi import get_db_connection
+from data.database import get_db_connection
 from langchain_core.tools import tool
-from database.vector_manager import get_vector_katalog_db
+from data.vector_manager import get_vector_katalog_db
 
 def jalankan_pencarian_sql(kata_kunci: str):
     """Menjalankan pencarian Lexical/Rule-based menggunakan Postgres"""

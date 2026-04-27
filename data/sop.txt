@@ -24,5 +24,5 @@ Syarat Klaim: [Tuliskan di sini: Contoh - Wajib melampirkan nota digital dari si
 ## 4. Persiapan Layanan & Biaya Tak Terduga (FAQ)
 Persiapan Kedatangan Teknisi: [Tuliskan di sini: Contoh - Harap pastikan ada akses jalan untuk tangga, dan minimal saldo token listrik tersedia].
 Standar Biaya Tambahan (Surcharge):
-Surcharge Jam Malam: Terdapat biaya tambahan sebesar Rp50.000 untuk pengerjaan di luar jam kerja normal (jam malam). (Catatan internal: Nanti pastikan ke manajer, "jam malam" ini mulai dari jam berapa? Misalnya di atas jam 18.00).
-Surcharge Apartemen: Terdapat biaya tambahan untuk pengerjaan di lokasi Apartemen/Rumah Susun karena tingkat kesulitan akses dan perizinan gedung. (Catatan internal: Tuliskan nominal pastinya jika ada).
+Surcharge Jam Malam: Terdapat biaya tambahan sebesar Rp50.000 untuk pengerjaan di luar jam kerja (jam 18.00 WIB - 01.00 WIB).
+Surcharge Apartemen: Terdapat biaya tambahan sebesar Rp25.000 untuk pengerjaan di lokasi Apartemen/Rumah Susun karena tingkat kesulitan akses dan perizinan gedung.
