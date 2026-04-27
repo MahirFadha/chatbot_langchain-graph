@@ -11,10 +11,16 @@ DB_URI = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 # Buat kolam koneksi (Connection Pool)
 # Kolam ini akan terus terbuka dan dipakai bergantian oleh agen AI
-pool = ConnectionPool(
-    conninfo=DB_URI,
-    kwargs={"autocommit": True}  # <--- INI OBATNYA!
-)
+pool = None
+
+def get_db_pool():
+    global pool
+    if pool is None:
+        pool = ConnectionPool(
+            conninfo=DB_URI,
+            kwargs={"autocommit": True}  # <--- INI OBATNYA!
+        )
+    return pool
 
 def rakit_pabrik_cs():
     print("Membangun Cetak Biru (Blueprint) LangGraph...")
@@ -42,10 +48,23 @@ def rakit_pabrik_cs():
     pabrik.add_edge("ruang_tools", "ruang_pemikir")
     
     # 4. Pasang CCTV Memori
-    memory = PostgresSaver(pool)
+    active_pool = get_db_pool()
+    memory = PostgresSaver(active_pool)
     memory.setup() # Otomatis membuat tabel jika belum ada
     
     # 5. Resmikan Pabrik!
     agen_beroperasi = pabrik.compile(checkpointer=memory)
     
     return agen_beroperasi
+
+# Di file graph/builder.py
+
+def tutup_pabrik_cs():
+    """Fungsi ini dipanggil saat server mati untuk menutup kolam koneksi DB"""
+    global pool
+    if pool is not None:
+        try:
+            pool.close()
+            print("[SYSTEM] 🔌 Kolam Koneksi PostgreSQL LangGraph berhasil ditutup.")
+        except Exception as e:
+            print(f"❌ [SYSTEM] Gagal menutup koneksi: {e}")

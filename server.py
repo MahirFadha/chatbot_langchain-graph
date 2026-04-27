@@ -1,11 +1,18 @@
+from utils.security import ubah_status_bot_manual
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 import uvicorn
-import asyncio # <-- IMPORT BARU UNTUK TIMER
-
+import asyncio 
+from utils.security import (
+    cek_izin_dan_update_interaksi, 
+    ubah_status_bot_manual, 
+    tambah_kata_blacklist, 
+    hapus_kata_blacklist,
+    lihat_daftar_blacklist,
+    lihat_pelanggan_bot_nonaktif
+)
 from services.waha_services import waha_sedang_mengetik, waha_kirim_balasan
-from utils.security import cek_izin_dan_update_interaksi
-from graph.builder import rakit_pabrik_cs, pool
+from graph.builder import rakit_pabrik_cs, tutup_pabrik_cs
 from database.vector_manager import inisialisasi_vektor_awal
 
 agen = None
@@ -98,7 +105,17 @@ async def lifespan(app: FastAPI):
     print("[SYSTEM] ✅ Otak AI Siap Melayani!\n")
     yield
     print("\n[SYSTEM] 🛑 Mematikan Server...\n")
-    pool.close()
+    
+    # 1. Batalkan semua antrean timer
+    for chat_id, data in CHAT_BUFFER.items():
+        if data.get("timer"):
+            data["timer"].cancel()
+            
+    print("[SYSTEM] 🧹 Membersihkan sisa antrean tugas...")
+    await asyncio.sleep(0.5) # Beri waktu sejenak agar asnycio membatalkan tugas
+
+    # 2. Tutup kolam koneksi
+    tutup_pabrik_cs()
     print("[SYSTEM] ✅ Koneksi Database LangGraph (Pool) ditutup dengan aman.\n")
 
 app = FastAPI(title="Aire Optima AI API", lifespan=lifespan)
@@ -108,30 +125,101 @@ async def terima_pesan_waha(request: Request):
     try:
         data = await request.json()
         
-        if data.get("event") == "message":
+        if data.get("event") in ["message", "message.any"]:
             payload = data.get("payload", {})
-            if payload.get("fromMe") == True:
-                return {"status": "Diabaikan"}
-
-            id_waha = payload.get("from")
-            teks_pelanggan = payload.get("body", "")
             
-            if not teks_pelanggan:
+            from_me = payload.get("fromMe")
+            id_pengirim = payload.get("from")
+            id_penerima = payload.get("to")
+            teks_pesan = payload.get("body", "").strip()
+
+            # =======================================================
+            # 🎛️ PUSAT KENDALI (Admin chat ke dirinya sendiri)
+            # =======================================================
+            if from_me and id_pengirim == id_penerima:
+                
+                # --- MENU BANTUAN (TEMPLATE) ---
+                menu_bantuan = (
+                    "🛠️ *PUSAT KENDALI ADMIN* 🛠️\n\n"
+                    "Daftar perintah yang tersedia:\n"
+                    "🔹 */bot off [nomor]* - Mematikan AI untuk pelanggan.\n"
+                    "🔹 */bot on [nomor]* - Menyalakan AI untuk pelanggan.\n"
+                    "🔹 */cek bot nonaktif* - Lihat daftar pelanggan yg ditangani Admin.\n"
+                    "🔹 */blacklist [kata] [kategori]* - Tambah kata terlarang.\n"
+                    "🔹 */unblacklist [kata]* - Hapus kata terlarang.\n"
+                    "🔹 */list blacklist* - Lihat semua kata terlarang.\n"
+                    "🔹 */list command* - Menampilkan pesan bantuan ini.\n"
+                )
+
+                # --- PENGECEKAN COMMAND ---
+                if teks_pesan.startswith("/bot off "):
+                    nomor_target = teks_pesan.replace("/bot off ", "")
+                    hasil = ubah_status_bot_manual(nomor_target, False)
+                    waha_kirim_balasan(id_pengirim, hasil)
+                    return {"status": "Command /bot off dieksekusi"}
+                    
+                elif teks_pesan.startswith("/bot on "):
+                    nomor_target = teks_pesan.replace("/bot on ", "")
+                    hasil = ubah_status_bot_manual(nomor_target, True)
+                    waha_kirim_balasan(id_pengirim, hasil)
+                    return {"status": "Command /bot on dieksekusi"}
+
+                elif teks_pesan.startswith("/blacklist "):
+                    isi_perintah = teks_pesan.replace("/blacklist ", "").strip()
+                    parts = isi_perintah.split(" ", 1)
+                    kata_input = parts[0]
+                    kategori_input = parts[1] if len(parts) > 1 else "umum"
+                    
+                    hasil = tambah_kata_blacklist(kata_input, kategori_input)
+                    waha_kirim_balasan(id_pengirim, hasil)
+                    return {"status": "Command /blacklist dieksekusi"}
+
+                elif teks_pesan.startswith("/unblacklist "):
+                    kata_input = teks_pesan.replace("/unblacklist ", "").strip()
+                    hasil = hapus_kata_blacklist(kata_input)
+                    waha_kirim_balasan(id_pengirim, hasil)
+                    return {"status": "Command /unblacklist dieksekusi"}
+
+                elif teks_pesan == "/cek bot nonaktif":
+                    hasil = lihat_pelanggan_bot_nonaktif()
+                    waha_kirim_balasan(id_pengirim, hasil)
+                    return {"status": "Command /cek_bot_nonaktif dieksekusi"}
+
+                elif teks_pesan == "/list blacklist":
+                    hasil = lihat_daftar_blacklist()
+                    waha_kirim_balasan(id_pengirim, hasil)
+                    return {"status": "Command /list_blacklist dieksekusi"}
+
+                elif teks_pesan == "/list command":
+                    waha_kirim_balasan(id_pengirim, menu_bantuan)
+                    return {"status": "Command /list_command dieksekusi"}
+
+                # --- FALLBACK (JIKA ADMIN TYPO / COMMAND TIDAK DIKENAL) ---
+                elif teks_pesan.startswith("/"):
+                    pesan_typo = f"⚠️ *Perintah '{teks_pesan}' tidak dikenali atau salah ketik!*\n\n{menu_bantuan}"
+                    waha_kirim_balasan(id_pengirim, pesan_typo)
+                    return {"status": "Command tidak dikenali (Fallback)"}
+            # =======================================================
+            # MENCEGAH LOOPING (Abaikan semua pesan dari kita sendiri)
+            # =======================================================
+            if from_me:
+                return {"status": "Diabaikan, ini pesan keluar"}
+
+            # =======================================================
+            # PROSES PESAN MASUK DARI PELANGGAN 
+            # =======================================================
+            if not teks_pesan:
                 return {"status": "Pesan bukan teks"}
-            
-            print(f"\n📥 [CHAT MASUK] Dari: {id_waha} | Isi: {teks_pelanggan}")
 
-            # 1. Panggil Satpam dari utils/
-            if not cek_izin_dan_update_interaksi(id_waha):
-                print(f"🛑 [SISTEM] Pesan dari {id_waha} ditolak oleh Satpam (Handoff/Blacklist).")
+            # 1. Panggil Satpam
+            if not cek_izin_dan_update_interaksi(id_pengirim, teks_pesan):
                 return {"status": "Ditolak Satpam"}
 
-            # 2. MASUKKAN KE BUFFER (Tidak lagi langsung dilempar ke LangGraph)
-            tambah_ke_buffer(id_waha, teks_pelanggan)
+            # 2. Masukkan ke Buffer
+            tambah_ke_buffer(id_pengirim, teks_pesan)
 
-            return {"status": "Diterima dan dimasukkan ke Buffer"}
+            return {"status": "Sukses dimasukkan buffer"}
             
-        return {"status": "Bukan pesan masuk"}
     except Exception as e:
         import traceback
         traceback.print_exc()
