@@ -14,6 +14,8 @@ def cek_izin_dan_update_interaksi(chat_id: str, teks_pesan: str = ""):
         
         if row:
             if row[0] == False: # Jika bot_active sudah False
+                # --- TAMBAHKAN DEBUGGING DI SINI ---
+                print(f"🛑 [SATPAM] Pesan dari {chat_id} diabaikan AI (Status: Ditangani Admin Manusia).")
                 return False    # Langsung tolak dari AI (biarkan Admin yang urus)
         else:
             # Pendaftar baru
@@ -32,7 +34,7 @@ def cek_izin_dan_update_interaksi(chat_id: str, teks_pesan: str = ""):
             cursor.execute("SELECT word, category FROM public.blacklisted_words")
             bad_words_db = cursor.fetchall()
             
-            print(f"🕵️‍♂️ [DEBUG SATPAM] Total kata di database: {len(bad_words_db)}") # <-- CCTV KITA
+            print(f"🕵️‍♂️ [DEBUG SATPAM] Total blacklist words di database: {len(bad_words_db)}") # <-- CCTV KITA
             
             for row_word in bad_words_db:
                 # Tambahkan .strip() untuk membuang spasi gaib dari database!

@@ -1,3 +1,4 @@
+import urllib.parse
 import requests
 
 WAHA_URL = "http://localhost:3000"
@@ -79,3 +80,59 @@ def dapatkan_phone_dari_lid(id_lid: str):
         print(f"⚠️ [WARNING] Gagal mencari Nomor HP asli ke WAHA: {e}")
         
     return id_lid # Jika gagal, kembalikan aslinya saja
+
+def kirim_notifikasi_admin(data_order: dict):
+    """Merakit dan mengirim notifikasi order baru ke Admin"""
+    
+    # 1. Format ID Pelanggan (Jaga-jaga jika menggunakan @lid)
+    id_pelanggan = data_order.get("nomor_hp", "")
+    nomor_asli = id_pelanggan
+    
+    if "@lid" in id_pelanggan:
+        nomor_asli = dapatkan_phone_dari_lid(id_pelanggan)
+        
+    # Bersihkan dari @c.us untuk link wa.me
+    nomor_bersih = nomor_asli.replace("@c.us", "").replace("@lid", "")
+    
+    # 2. Format Harga (Tambahkan titik ribuan ala Indonesia)
+    total_harga = data_order.get("total_tagihan", 0)
+    total_rp = f"{total_harga:,.0f}".replace(",", ".")
+    
+    # 3. Format Link Google Maps Ajaib
+    # Mengubah teks alamat menjadi URL yang valid (misal spasi jadi %20)
+    alamat_mentah = data_order.get("alamat", "")
+    alamat_encoded = urllib.parse.quote(alamat_mentah)
+    link_maps = f"https://www.google.com/maps/search/?api=1&query={alamat_encoded}"
+    
+    # 4. Rakit Template Pesan
+    pesan_admin = f"""🚨 *ORDER BARU MASUK (AIRE OPTIMA)* 🚨
+ID: {data_order.get('id_order')}
+━━━━━━━━━━━━━━━━━━━━━
+👤 *DATA PELANGGAN*
+Nama   : {data_order.get('nama')}
+No HP  : {nomor_bersih}
+WA     : https://wa.me/{nomor_bersih}
+
+📍 *LOKASI PENGERJAAN*
+Alamat : {alamat_mentah}
+🗺️ Maps : {link_maps}
+
+🛠️ *DETAIL PESANAN*
+Jadwal : {data_order.get('jadwal')}
+
+🛒 *RINCIAN ITEM:*
+{data_order.get('rincian_item')}
+
+💰 *TOTAL TAGIHAN: Rp {total_rp}*
+━━━━━━━━━━━━━━━━━━━━━
+⚠️ _Mohon segera konfirmasi ketersediaan teknisi ke pelanggan._"""
+
+    # 5. Tembakkan ke nomor Admin!
+    try:
+        from config.settings import NOMOR_WA
+        if not NOMOR_WA.endswith("@c.us"):
+            NOMOR_WA += "@c.us"
+        waha_kirim_balasan(NOMOR_WA, pesan_admin)
+        print("✅ [NOTIFIKASI] Form pesanan berhasil dikirim ke Admin!")
+    except Exception as e:
+        print(f"❌ [NOTIFIKASI ERROR] Gagal mengirim ke Admin: {e}") 
