@@ -10,7 +10,8 @@ from utils.security import (
     tambah_kata_blacklist, 
     hapus_kata_blacklist,
     lihat_daftar_blacklist,
-    lihat_pelanggan_bot_nonaktif
+    lihat_pelanggan_bot_nonaktif,
+    normalisasi_id_waha
 )
 from services.waha_services import waha_sedang_mengetik, waha_kirim_balasan, waha_tandai_dibaca
 from graph.builder import rakit_pabrik_cs, tutup_pabrik_cs
@@ -135,6 +136,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Aire Optima AI API", lifespan=lifespan)
 
+# Pastikan kamu import fungsi normalisasinya di bagian atas file!
+# from services.waha_services import normalisasi_id_waha 
+# (Sesuaikan dengan lokasi file-mu)
+
 @app.post("/webhook")
 async def terima_pesan_waha(request: Request):
     try:
@@ -144,9 +149,16 @@ async def terima_pesan_waha(request: Request):
             payload = data.get("payload", {})
             
             from_me = payload.get("fromMe")
-            id_pengirim = payload.get("from")
-            id_penerima = payload.get("to")
+            id_pengirim_mentah = payload.get("from")
+            id_penerima_mentah = payload.get("to")
             teks_pesan = payload.get("body", "").strip()
+
+            # =======================================================
+            # 🛡️ NORMALISASI ID DI PINTU GERBANG UTAMA!
+            # =======================================================
+            id_pengirim = normalisasi_id_waha(id_pengirim_mentah)
+            id_penerima = normalisasi_id_waha(id_penerima_mentah)
+            # =======================================================
 
             # =======================================================
             # 🎛️ PUSAT KENDALI (Admin chat ke dirinya sendiri)
@@ -168,13 +180,18 @@ async def terima_pesan_waha(request: Request):
 
                 # --- PENGECEKAN COMMAND ---
                 if teks_pesan.startswith("/bot off "):
-                    nomor_target = teks_pesan.replace("/bot off ", "")
+                    # Admin bebas mengetik "0812..." atau "62812...", kita normalisasi juga!
+                    nomor_input = teks_pesan.replace("/bot off ", "").strip()
+                    nomor_target = normalisasi_id_waha(nomor_input)
+                    
                     hasil = ubah_status_bot_manual(nomor_target, False)
                     waha_kirim_balasan(id_pengirim, hasil)
                     return {"status": "Command /bot off dieksekusi"}
                     
                 elif teks_pesan.startswith("/bot on "):
-                    nomor_target = teks_pesan.replace("/bot on ", "")
+                    nomor_input = teks_pesan.replace("/bot on ", "").strip()
+                    nomor_target = normalisasi_id_waha(nomor_input)
+                    
                     hasil = ubah_status_bot_manual(nomor_target, True)
                     waha_kirim_balasan(id_pengirim, hasil)
                     return {"status": "Command /bot on dieksekusi"}
@@ -214,6 +231,7 @@ async def terima_pesan_waha(request: Request):
                     pesan_typo = f"⚠️ *Perintah '{teks_pesan}' tidak dikenali atau salah ketik!*\n\n{menu_bantuan}"
                     waha_kirim_balasan(id_pengirim, pesan_typo)
                     return {"status": "Command tidak dikenali (Fallback)"}
+                    
             # =======================================================
             # MENCEGAH LOOPING (Abaikan semua pesan dari kita sendiri)
             # =======================================================
@@ -226,11 +244,11 @@ async def terima_pesan_waha(request: Request):
             if not teks_pesan:
                 return {"status": "Pesan bukan teks"}
 
-            # 1. Panggil Satpam
+            # 1. Panggil Satpam (Menggunakan ID yang sudah dinormalisasi)
             if not cek_izin_dan_update_interaksi(id_pengirim, teks_pesan):
                 return {"status": "Ditolak Satpam"}
 
-            # 2. Masukkan ke Buffer
+            # 2. Masukkan ke Buffer (Menggunakan ID yang sudah dinormalisasi)
             tambah_ke_buffer(id_pengirim, teks_pesan)
 
             return {"status": "Sukses dimasukkan buffer"}

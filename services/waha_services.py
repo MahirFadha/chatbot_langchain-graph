@@ -1,13 +1,6 @@
 import urllib.parse
 import requests
-
-WAHA_URL = "http://localhost:3000"
-WAHA_SESSION = "default"
-
-# 1. MASUKKAN API KEY WAHA KAMU DI SINI
-# Jika di n8n kamu pakai API Key, copy-paste ke sini.
-# Jika kamu merasa tidak pernah membuat API Key, coba ubah jadi "123" atau biarkan kosong ""
-WAHA_API_KEY = "chatbot-aire" 
+from config.settings import WAHA_API_KEY, WAHA_SESSION, WAHA_URL
 
 def get_headers():
     """Fungsi pembantu untuk merakit Kepala Surat (Headers)"""
@@ -61,18 +54,6 @@ def waha_kirim_balasan(chat_id, teks_balasan):
     except Exception as e:
         print(f"❌ [ERROR KONEKSI WAHA] Gagal mengirim pesan: {e}")
 
-def dapatkan_lid_dari_waha(nomor_hp: str):
-    """Mencari @lid dari nomor HP pelanggan via WAHA"""
-    nomor_bersih = "".join(filter(str.isdigit, nomor_hp))
-    try:
-        url = f"{WAHA_URL}/api/{WAHA_SESSION}/lids/pn/{nomor_bersih}@c.us"
-        response = requests.get(url, headers=get_headers())
-        if response.status_code == 200:
-            return response.json().get("lid")
-    except Exception as e:
-        print(f"⚠️ [WARNING] Gagal mencari LID ke WAHA: {e}")
-    return None
-
 def dapatkan_phone_dari_lid(id_lid: str):
     """Menerjemahkan @lid kembali menjadi nomor HP biasa (@c.us)"""
     # Jika sudah @c.us atau tidak ada @lid, langsung kembalikan aslinya
@@ -96,22 +77,18 @@ def dapatkan_phone_dari_lid(id_lid: str):
 def kirim_notifikasi_admin(data_order: dict):
     """Merakit dan mengirim notifikasi order baru ke Admin"""
     
-    # 1. Format ID Pelanggan (Jaga-jaga jika menggunakan @lid)
+    # 1. Format ID Pelanggan (KITA YAKIN 100% INI SUDAH @c.us)
     id_pelanggan = data_order.get("nomor_hp", "")
-    nomor_asli = id_pelanggan
     
-    if "@lid" in id_pelanggan:
-        nomor_asli = dapatkan_phone_dari_lid(id_pelanggan)
-        
-    # Bersihkan dari @c.us untuk link wa.me
-    nomor_bersih = nomor_asli.replace("@c.us", "").replace("@lid", "")
+    # Langsung bersihkan @c.us untuk keperluan link wa.me
+    nomor_bersih = id_pelanggan.replace("@c.us", "")
     
     # 2. Format Harga (Tambahkan titik ribuan ala Indonesia)
     total_harga = data_order.get("total_tagihan", 0)
     total_rp = f"{total_harga:,.0f}".replace(",", ".")
     
     # 3. Format Link Google Maps Ajaib
-    # Mengubah teks alamat menjadi URL yang valid (misal spasi jadi %20)
+    import urllib.parse
     alamat_mentah = data_order.get("alamat", "")
     alamat_encoded = urllib.parse.quote(alamat_mentah)
     link_maps = f"https://www.google.com/maps/search/?api=1&query={alamat_encoded}"
@@ -141,10 +118,14 @@ Jadwal : {data_order.get('jadwal')}
 
     # 5. Tembakkan ke nomor Admin!
     try:
-        from config.settings import NOMOR_WA
-        if not NOMOR_WA.endswith("@c.us"):
-            NOMOR_WA += "@c.us"
-        waha_kirim_balasan(NOMOR_WA, pesan_admin)
+        from config.settings import NOMOR_WA # Pastikan nama variabel sesuai di config-mu
+        
+        # Normalisasi nomor admin jaga-jaga kalau di .env belum ada @c.us
+        admin_target = str(NOMOR_WA).strip()
+        if admin_target.startswith("0"): admin_target = "62" + admin_target[1:]
+        if not admin_target.endswith("@c.us"): admin_target += "@c.us"
+        
+        waha_kirim_balasan(admin_target, pesan_admin)
         print("✅ [NOTIFIKASI] Form pesanan berhasil dikirim ke Admin!")
     except Exception as e:
         print(f"❌ [NOTIFIKASI ERROR] Gagal mengirim ke Admin: {e}")

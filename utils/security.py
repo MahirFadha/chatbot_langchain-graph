@@ -1,6 +1,6 @@
 import re
 from data.database import get_db_connection
-from services.waha_services import waha_kirim_balasan, dapatkan_lid_dari_waha, dapatkan_phone_dari_lid
+from services.waha_services import waha_kirim_balasan, dapatkan_phone_dari_lid
 
 def cek_izin_dan_update_interaksi(chat_id: str, teks_pesan: str = ""):
     diizinkan = True
@@ -81,34 +81,25 @@ def ubah_status_bot_manual(input_admin: str, status: bool):
     # 1. Bersihkan nomor dari spasi/karakter aneh
     nomor_hp = "".join(filter(str.isdigit, input_admin))
     
-    # --- PERBAIKAN: UBAH '0' MENJADI '62' ---
+    # --- UBAH '0' MENJADI '62' (Jaga-jaga jika admin ketik manual 0812...) ---
     if nomor_hp.startswith("0"):
         nomor_hp = "62" + nomor_hp[1:]
-    # ---------------------------------------
-    
-    print(f"\n🔍 [DEBUG PUSAT KENDALI] Target Nomor: {nomor_hp}")
+    # ------------------------------------------------------------------------
     
     id_cus = f"{nomor_hp}@c.us"
+    print(f"\n🔍 [DEBUG PUSAT KENDALI] Target Update Status: {id_cus} menjadi {'ON' if status else 'OFF'}")
     
-    # 2. Minta layanan WAHA untuk menerjemahkan ke @lid
-    id_lid = dapatkan_lid_dari_waha(nomor_hp) 
-    
-    print(f"🔍 [DEBUG PUSAT KENDALI] Hasil Translasi WAHA (@lid): {id_lid}\n")
-    
+    # 2. Langsung eksekusi ke Database (Sangat Cepat & Ringan!)
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        if id_lid:
-            # Gunakan IN untuk mencari keduanya
-            cursor.execute("UPDATE public.customers SET bot_active = %s WHERE id_customer IN (%s, %s)", (status, id_cus, id_lid))
-        else:
-            cursor.execute("UPDATE public.customers SET bot_active = %s WHERE id_customer = %s", (status, id_cus))
+        cursor.execute("UPDATE public.customers SET bot_active = %s WHERE id_customer = %s", (status, id_cus))
         conn.commit()
         
         if cursor.rowcount > 0:
             return f"✅ Berhasil! Bot untuk pelanggan {nomor_hp} sekarang {'MENYALA' if status else 'MATI'}."
         else:
-            return f"⚠️ Gagal: Nomor {nomor_hp} (LID: {id_lid}) tidak ditemukan di database."
+            return f"⚠️ Gagal: Nomor {nomor_hp} tidak ditemukan di database. Pastikan pelanggan tersebut pernah melakukan chat."
     except Exception as e:
         return f"❌ Gagal update database: {e}"
     finally:
@@ -188,11 +179,12 @@ def lihat_pelanggan_bot_nonaktif():
         for i, row in enumerate(rows, 1):
             id_asli = row[0]
             
-            # Translasi @lid ke nomor HP
-            if "@lid" in id_asli:
-                id_asli = dapatkan_phone_dari_lid(id_asli)
-                
-            id_bersih = id_asli.replace("@c.us", "").replace("@lid", "")
+            # Karena database sudah dipastikan isinya @c.us, kita tinggal bersihkan
+            id_bersih = id_asli.replace("@c.us", "")
+            
+            # (Opsional) Jaga-jaga jika ada data sisa masa lalu di database yang belum terhapus
+            id_bersih = id_bersih.replace("@lid", "") 
+            
             pesan += f"{i}. wa.me/{id_bersih}\n"
             
         pesan += "\n💡 _Ketik /bot on [nomor] untuk mengembalikan pelanggan ke AI._"
@@ -241,3 +233,26 @@ def lihat_daftar_blacklist():
     finally:
         cursor.close()
         conn.close()
+
+def normalisasi_id_waha(raw_id: str) -> str:
+    """
+    Satpam Pintu Gerbang: Mengubah SEMUA jenis ID WhatsApp 
+    menjadi format standar internasional yang berakhiran @c.us
+    """
+    # 1. Jika itu @lid, kita bongkar dan cari nomor aslinya
+    if "@lid" in raw_id:
+        # Gunakan fungsi yang sudah kamu buat sebelumnya di n8n/python
+        nomor_asli = dapatkan_phone_dari_lid(raw_id) 
+        
+        # Bersihkan dari embel-embel lain
+        nomor_bersih = str(nomor_asli).replace("@c.us", "").replace("@lid", "").strip()
+        return f"{nomor_bersih}@c.us"
+        
+    # 2. Jika ID masuk belum ada @c.us (misal cuma angka 62813...), kita tambahkan
+    if not raw_id.endswith("@c.us") and "@g.us" not in raw_id:
+        # Hati-hati jangan tambahkan ke @g.us (Grup WhatsApp)
+        nomor_bersih = str(raw_id).strip()
+        return f"{nomor_bersih}@c.us"
+        
+    # 3. Jika sudah @c.us sejak awal, kembalikan apa adanya
+    return raw_id
