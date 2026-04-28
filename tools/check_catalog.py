@@ -297,11 +297,11 @@ def cari_katalog_produk(kata_kunci: str) -> str:
         katalog_final_dict = {} 
         
         # Masukkan hasil SQL terlebih dahulu
-        for item in hasil_sql:
+        for item in hasil_sql[:2]:
             katalog_final_dict[item["id_referensi"]] = item
             
         # Masukkan hasil Vektor (Jika ID sudah ada, akan otomatis di-skip)
-        for doc in hasil_vektor:
+        for doc in hasil_vektor[:3]:
             id_ref = doc.metadata.get('id_referensi')
             if id_ref not in katalog_final_dict:
                 katalog_final_dict[id_ref] = {
@@ -313,8 +313,7 @@ def cari_katalog_produk(kata_kunci: str) -> str:
                 
         # 4. POTONG HASIL GABUNGAN MENJADI MAKSIMAL 4 SAJA
         # (Agar hasil Vektor tidak terbuang jika SQL mendominasi urutan awal)
-        katalog_final_list = list(katalog_final_dict.values())[:4]
-        
+        katalog_final_list = list(katalog_final_dict.values())        
         print("\n🔗 [DEBUG 3] HASIL GABUNGAN FINAL (DIPOTONG JADI TOP 4):")
         for i, item in enumerate(katalog_final_list):
             print(f"   {i+1}. [{item['id_referensi']}] (Sumber: {item['sumber']})")

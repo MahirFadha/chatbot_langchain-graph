@@ -59,14 +59,15 @@ def catat_pesanan_baru(
         cursor.execute("""
             INSERT INTO public.order_detail (order_id, product_service_id, item_name, qty, price)
             VALUES (%s, %s, %s, 1, %s)
-        """, (order_id, id_item_utama, nama_item_utama, harga_item_utama))
+        """, (order_id, id_item_utama if id_item_utama else "ITEM-01", nama_item_utama, harga_item_utama))
 
-        # -- Insert Item Tambahan JIKA ADA --
-        if id_jasa_tambahan and nama_jasa_tambahan:
+        # -- Insert Item Tambahan (JASA) JIKA ADA --
+        # KITA UBAH SYARATNYA: Patokannya adalah nama dan harga (karena AI kadang lupa ngasih ID)
+        if nama_jasa_tambahan and harga_jasa_tambahan > 0:
             cursor.execute("""
                 INSERT INTO public.order_detail (order_id, product_service_id, item_name, qty, price)
                 VALUES (%s, %s, %s, 1, %s)
-            """, (order_id, id_jasa_tambahan, nama_jasa_tambahan, harga_jasa_tambahan))
+            """, (order_id, id_jasa_tambahan if id_jasa_tambahan else "JASA-BUNDLE", nama_jasa_tambahan, harga_jasa_tambahan))
 
         # 4. SIMPAN PERUBAHAN
         conn.commit()
@@ -85,16 +86,27 @@ def catat_pesanan_baru(
             pass
         # ------------------------------------------------------------
         
+        # RAKIT RINCIAN ITEM SECARA LENGKAP
+        # 1. Masukkan Item Utama
         rincian_item = f"- 1x {nama_item_utama} (Rp {harga_item_utama:,})"
-        # ... (kode rincian_item sama seperti sebelumnya) ...
+        
+        # 2. Masukkan Item Jasa Bundling (Jika ada)
+        if nama_jasa_tambahan and harga_jasa_tambahan > 0:
+            rincian_item += f"\n- 1x {nama_jasa_tambahan} (Rp {harga_jasa_tambahan:,})"
+            
+        # 3. Masukkan Biaya Tambahan / Surcharge (Apartemen / Jam Malam)
+        if nominal_biaya_tambahan > 0:
+            # Jaga-jaga kalau AI lupa ngasih nama alasan biayanya
+            teks_biaya = keterangan_biaya_tambahan if keterangan_biaya_tambahan else "Biaya Tambahan Sistem"
+            rincian_item += f"\n\n⚠️ *BIAYA TAMBAHAN*\n- {teks_biaya} (Rp {nominal_biaya_tambahan:,})"
             
         data_order = {
             "id_order": order_id,
             "nama": nama_asli,
             "nomor_hp": id_customer_aktif,
             "alamat": alamat_lengkap,
-            "jadwal": jadwal_tampil, # <-- UBAH VARIABEL INI DARI 'jadwal' MENJADI 'jadwal_tampil'
-            "rincian_item": rincian_item,
+            "jadwal": jadwal_tampil,
+            "rincian_item": rincian_item, # String gabungan tadi akan dioper ke sini
             "total_tagihan": total_semua
         }
         
@@ -154,7 +166,7 @@ def ubah_jadwal_pesanan(order_id: str, jadwal_baru: str, config: RunnableConfig)
         # 3. Kirim Notif ke Admin dengan Format Manusiawi & Nama Pelanggan
         try:
             from services.waha_services import waha_kirim_balasan
-            from config.settings import ADMIN_WA_NUMBER
+            from config.settings import NOMOR_WA
             
             # --- PENERJEMAH FORMAT JADWAL ---
             hari_indo = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
@@ -175,7 +187,7 @@ def ubah_jadwal_pesanan(order_id: str, jadwal_baru: str, config: RunnableConfig)
             except: pass
             # --------------------------------
             
-            admin_target = str(ADMIN_WA_NUMBER).strip()
+            admin_target = str(NOMOR_WA).strip()
             if admin_target.startswith("0"): admin_target = "62" + admin_target[1:]
             if not admin_target.endswith("@c.us"): admin_target += "@c.us"
             

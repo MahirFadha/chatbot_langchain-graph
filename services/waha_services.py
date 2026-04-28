@@ -119,7 +119,7 @@ def kirim_notifikasi_admin(data_order: dict):
     # 4. Rakit Template Pesan
     pesan_admin = f"""🚨 *ORDER BARU MASUK (AIRE OPTIMA)* 🚨
 ID: {data_order.get('id_order')}
-━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━
 👤 *DATA PELANGGAN*
 Nama   : {data_order.get('nama')}
 No HP  : {nomor_bersih}
@@ -136,7 +136,7 @@ Jadwal : {data_order.get('jadwal')}
 {data_order.get('rincian_item')}
 
 💰 *TOTAL TAGIHAN: Rp {total_rp}*
-━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━
 ⚠️ _Mohon segera konfirmasi ketersediaan teknisi ke pelanggan._"""
 
     # 5. Tembakkan ke nomor Admin!
