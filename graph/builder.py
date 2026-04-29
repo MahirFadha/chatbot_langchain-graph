@@ -18,7 +18,7 @@ def get_db_pool():
     if pool is None:
         pool = ConnectionPool(
             conninfo=DB_URI,
-            kwargs={"autocommit": True}  # <--- INI OBATNYA!
+            kwargs={"autocommit": True}
         )
     return pool
 
