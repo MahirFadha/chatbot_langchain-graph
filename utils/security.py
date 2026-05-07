@@ -256,3 +256,69 @@ def normalisasi_id_waha(raw_id: str) -> str:
         
     # 3. Jika sudah @c.us sejak awal, kembalikan apa adanya
     return raw_id
+
+def bersihkan_memori_langgraph():
+    """
+    Fungsi Garbage Collector: Menghapus checkpoint memori LangGraph
+    untuk customer yang tidak aktif lebih dari 3 hari.
+    """
+    print("🧹 [GARBAGE COLLECTOR] Memulai pembersihan memori LangGraph (Inaktif > 3 Hari)...")
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # CATATAN PENTING: 
+        # Sesuaikan 'nomor_wa' dengan nama kolom di tabel customers milikmu.
+        # Jika thread_id di LangGraph berformat "628123@c.us" sedangkan di tabel customers 
+        # hanya "628123", maka kamu harus menggabungkannya di SQL: (nomor_wa || '@c.us')
+        
+        # 1. Hapus dari checkpoint_writes (Tabel anakan 1)
+        query_del_writes = """
+            DELETE FROM checkpoint_writes 
+            WHERE thread_id IN (
+                SELECT nomor_wa 
+                FROM customers 
+                WHERE last_interaction < NOW() - INTERVAL '3 days'
+            );
+        """
+        cursor.execute(query_del_writes)
+        writes_terhapus = cursor.rowcount
+
+        # 2. Hapus dari checkpoint_blobs (Tabel anakan 2)
+        query_del_blobs = """
+            DELETE FROM checkpoint_blobs 
+            WHERE thread_id IN (
+                SELECT nomor_wa 
+                FROM customers 
+                WHERE last_interaction < NOW() - INTERVAL '3 days'
+            );
+        """
+        cursor.execute(query_del_blobs)
+        blobs_terhapus = cursor.rowcount
+
+        # 3. Hapus dari checkpoints (Tabel Induk)
+        query_del_checkpoints = """
+            DELETE FROM checkpoints 
+            WHERE thread_id IN (
+                SELECT nomor_wa 
+                FROM customers 
+                WHERE last_interaction < NOW() - INTERVAL '3 days'
+            );
+        """
+        cursor.execute(query_del_checkpoints)
+        checkpoints_terhapus = cursor.rowcount
+
+        # Commit semua penghapusan
+        conn.commit()
+        
+        print(f"✅ [GARBAGE COLLECTOR] Selesai!")
+        print(f"   - Checkpoints terhapus: {checkpoints_terhapus} baris")
+        print(f"   - Writes terhapus: {writes_terhapus} baris")
+        print(f"   - Blobs terhapus: {blobs_terhapus} baris")
+        
+        cursor.close()
+        conn.close()
+        
+    except Exception as e:
+        print(f"❌ [GARBAGE COLLECTOR] Error saat membersihkan memori: {e}")

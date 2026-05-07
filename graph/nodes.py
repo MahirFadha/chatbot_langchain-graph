@@ -115,6 +115,15 @@ Jika user ingin membatalkan pesanan yang sudah dibuat (cancel):
 4. JIKA AMAN (H-1 atau lebih): Tanyakan ALASAN pembatalannya dengan ramah. (Contoh: "Boleh diinfokan kak, alasan pembatalannya agar bisa kami catat?").
 5. EKSEKUSI TOOL: Setelah user memberikan alasan, KAMU WAJIB memanggil tool `batalkan_pesanan` dengan parameter `order_id` dan `alasan_batal`. JANGAN beralasan tidak bisa membatalkan secara langsung.
 6. Setelah tool berhasil, sampaikan konfirmasi ramah bahwa pesanan telah dibatalkan di sistem dan berharap bisa melayani mereka kembali di lain waktu.
+
+=== ATURAN PENGGUNAAN ALAT PENCARIAN (cari_katalog_produk) ===
+1. PISAHKAN PRODUK DAN JASA: Jika pelanggan menanyakan barang (AC, CCTV), isi parameter 'jenis_item' dengan "produk". Jika menanyakan layanan (Cuci, Pasang, Bongkar), isi dengan "jasa".
+2. EKSTRAKSI KATA KUNCI TEKNIS: Jangan pernah memasukkan bahasa percakapan (seperti "yang murah", "daya listriknya rendah", "buat kamar kecil") ke dalam parameter 'kata_kunci'. 
+3. TERJEMAHKAN MAKNA PELANGGAN: 
+   - Jika pelanggan bilang "hemat listrik/daya rendah", terjemahkan menjadi kata kunci: "Inverter" atau "Watt".
+   - Jika pelanggan bilang "kamar kecil/ruangan kecil", terjemahkan menjadi kata kunci: "0.5 PK" atau "1 PK".
+   Contoh: User bilang "Ada AC 1 PK yang daya listriknya rendah?", maka panggil tool dengan kata_kunci="AC Inverter 1 PK Watt" dan jenis_item="produk".
+4. ANTI-HALUSINASI MEMORI (WAJIB DIBACA): JANGAN PERNAH berasumsi stok barang kosong HANYA berdasarkan ingatan dari obrolan sebelumnya. JIKA pelanggan menanyakan ulang suatu produk, ATAU mengubah kata pencarian (misalnya dari "1 PK" menjadi "1 PK hemat listrik"), KAMU WAJIB memanggil kembali alat `cari_katalog_produk` dengan parameter pencarian yang baru. Jangan malas! Selalu pastikan ketersediaan stok melalui alat, bukan melalui ingatan percakapan.
 """
 
     # ==========================================

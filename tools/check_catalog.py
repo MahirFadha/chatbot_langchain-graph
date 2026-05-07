@@ -1,12 +1,30 @@
+from data.vector_manager import bersihkan_html
 from data.database import get_db_connection
 from langchain_core.tools import tool
 from data.vector_manager import get_vector_katalog_db
 
-def jalankan_pencarian_sql(kata_kunci: str):
+def jalankan_pencarian_sql(kata_kunci: str, jenis_item: str = ""):
     """Menjalankan pencarian Lexical/Rule-based menggunakan Postgres"""
     
-    # KITA GUNAKAN QUERY ASLIMU SECARA UTUH (Hanya ganti $1 jadi %s)
-    query_sql = """
+    # -----------------------------------------------------------
+    # INJEKSI FILTER BERDASARKAN PARAMETER 'jenis_item'
+    # -----------------------------------------------------------
+    if jenis_item.lower() == "produk":
+        kondisi_filter_tipe = "tipe_item = 'barang'"
+    elif jenis_item.lower() == "jasa":
+        kondisi_filter_tipe = "tipe_item = 'jasa'"
+    else:
+        kondisi_filter_tipe = """
+        (
+            ((SELECT target FROM pk_input) = 'jasa' AND tipe_item = 'jasa')
+            OR
+            ((SELECT target FROM pk_input) = 'barang' AND tipe_item = 'barang')
+            OR
+            ((SELECT target FROM pk_input) = 'mixed')
+        )
+        """
+
+    query_sql = f"""
     WITH
     -- ==========================================================
     -- 0) INPUT USER
@@ -80,28 +98,39 @@ def jalankan_pencarian_sql(kata_kunci: str):
     ),
 
     -- ==========================================================
-    -- 4) BANGUN KANDIDAT: PRODUCTS + SERVICE_ITEMS
+    -- 4) BANGUN KANDIDAT DENGAN JOIN LENGKAP (SEPERTI CHROMA)
     -- ==========================================================
     products_src AS (
       SELECT
-        kdprod::text AS id,
-        prod_name::text AS nama_display,
-        price::numeric AS harga,
+        p.kdprod::text AS id,
+        p.prod_name::text AS nama_display,
+        p.ket_prod::text AS keterangan_item,
+        p.price::numeric AS harga,
         'barang'::text AS tipe_item,
-        service_json->>'srvc_id' AS id_jasa_bundle,
-        service_json->>'srvc_name' AS nama_jasa_bundle,
-        (service_json->>'base_price')::numeric AS harga_jasa_bundle
-      FROM catalog.products
+        p.service_json->>'srvc_id' AS id_jasa_bundle,
+        p.service_json->>'srvc_name' AS nama_jasa_bundle,
+        (p.service_json->>'base_price')::numeric AS harga_jasa_bundle,
+        b.nmmerk::text AS merek,              -- TAMBAHAN MEREK
+        j.nmjens::text AS kategori,           -- TAMBAHAN KATEGORI
+        pd.detail_product::text AS spesifikasi -- TAMBAHAN SPESIFIKASI HTML
+      FROM catalog.products p
+      LEFT JOIN catalog.brands b ON p.kdmerk = b.kdmerk
+      LEFT JOIN catalog.jenis_products j ON p.kdjens = j.kdjens
+      LEFT JOIN catalog.product_detail pd ON p.kdprod = pd.kdprod
     ),
     services_src AS (
       SELECT
         srvc_id::text AS id,
         srvc_name::text AS nama_display,
+        srvc_desc::text AS keterangan_item,
         base_price::numeric AS harga,
         'jasa'::text AS tipe_item,
         NULL::text AS id_jasa_bundle,
         NULL::text AS nama_jasa_bundle,
-        NULL::numeric AS harga_jasa_bundle
+        NULL::numeric AS harga_jasa_bundle,
+        'Aire Optima'::text AS merek,
+        'Jasa'::text AS kategori,
+        NULL::text AS spesifikasi
       FROM catalog.service_items
     ),
     union_src AS (
@@ -111,12 +140,13 @@ def jalankan_pencarian_sql(kata_kunci: str):
     ),
 
     -- ==========================================================
-    -- 5) EKSTRAK PK DARI NAMA ITEM
+    -- 5) EKSTRAK PK DARI NAMA ITEM & GABUNG TEKS UNTUK PENCARIAN
     -- ==========================================================
     enriched AS (
       SELECT
         s.*,
         lower(s.nama_display) AS nama_lc,
+        lower(s.nama_display || ' ' || COALESCE(s.keterangan_item, '') || ' ' || COALESCE(s.spesifikasi, '')) AS search_text_lc,
         NULLIF((regexp_match(lower(s.nama_display), '(\\d+(?:\\.\\d+)?)\\s*pk'))[1], '')::numeric AS pk_exact,
         NULLIF((regexp_match(lower(s.nama_display), '(\\d+(?:\\.\\d+)?)\\s*-\\s*(\\d+(?:\\.\\d+)?)\\s*pk'))[1], '')::numeric AS pk_min,
         NULLIF((regexp_match(lower(s.nama_display), '(\\d+(?:\\.\\d+)?)\\s*-\\s*(\\d+(?:\\.\\d+)?)\\s*pk'))[2], '')::numeric AS pk_max
@@ -124,7 +154,7 @@ def jalankan_pencarian_sql(kata_kunci: str):
     ),
 
     -- ==========================================================
-    -- 6) SCORING: FTS + TRIGRAM + ILIKE + RULE BOOST
+    -- 6) SCORING
     -- ==========================================================
     scored AS (
       SELECT
@@ -136,9 +166,9 @@ def jalankan_pencarian_sql(kata_kunci: str):
         i.want_service,
         i.want_product,
 
-        word_similarity(i.q_no_pk, e.nama_lc) AS sim_trgm,
-        (to_tsvector('indonesian', e.nama_lc) @@ plainto_tsquery('indonesian', i.q_no_pk)) AS match_fts,
-        (e.nama_lc ILIKE '%%' || i.q_no_pk || '%%') AS match_ilike,
+        word_similarity(i.q_no_pk, e.search_text_lc) AS sim_trgm,
+        (to_tsvector('indonesian', e.search_text_lc) @@ plainto_tsquery('indonesian', i.q_no_pk)) AS match_fts,
+        (length(trim(i.q_no_pk)) > 0 AND e.search_text_lc ILIKE '%%' || trim(i.q_no_pk) || '%%') AS match_ilike,
 
         CASE
           WHEN i.pk_user IS NULL THEN 0
@@ -167,6 +197,10 @@ def jalankan_pencarian_sql(kata_kunci: str):
         id_jasa_bundle,
         nama_jasa_bundle,
         harga_jasa_bundle,
+        keterangan_item,
+        merek,          -- DITERUSKAN
+        kategori,       -- DITERUSKAN
+        spesifikasi,    -- DITERUSKAN
 
         sim_trgm,
         match_fts,
@@ -195,16 +229,14 @@ def jalankan_pencarian_sql(kata_kunci: str):
       id_jasa_bundle,
       nama_jasa_bundle,
       harga_jasa_bundle,
+      keterangan_item,
+      merek,
+      kategori,
+      spesifikasi,
       skor_total
     FROM final_rank
     WHERE
-      (
-        ((SELECT target FROM pk_input) = 'jasa' AND tipe_item = 'jasa')
-        OR
-        ((SELECT target FROM pk_input) = 'barang' AND tipe_item = 'barang')
-        OR
-        ((SELECT target FROM pk_input) = 'mixed')
-      )
+      {kondisi_filter_tipe} 
       AND
       (
         skor_total >= 0.35 
@@ -230,28 +262,49 @@ def jalankan_pencarian_sql(kata_kunci: str):
         rows = cursor.fetchall()
         
         for row in rows:
-            # PENTING: Menyesuaikan index dengan SELECT akhir di query!
-            # id (0), pesanan (1), harga (2), tipe_item (3), 
-            # id_jasa_bundle (4), nama_jasa_bundle (5), harga_jasa_bundle (6), skor_total (7)
             id_ref = row[0]
             nama = row[1]
-            harga = row[2]
+            harga = row[2] or 0
             tipe = row[3]
             id_jasa_bundle = row[4]
-            # row[4] adalah id_jasa_bundle, kita lewati karena tidak perlu ditampilkan ke LLM
             jasa_bundle = row[5]
-            harga_bundle = row[6]
-            # row[7] adalah skor_total
+            harga_bundle = row[6] or 0
+            keterangan = row[7] or ""
+            merek = row[8] or "Tanpa Merek"
+            kategori = row[9] or "Umum"
+            spesifikasi_html = row[10] or ""
             
-            teks = f"Nama {str(tipe).capitalize()}: {nama}. Harga: Rp{harga}. "
-            if jasa_bundle:
-                teks += f"Jasa Bundling Wajib: [{id_jasa_bundle}] {jasa_bundle} (Biaya: Rp{harga_bundle})."
+            # --- RAKIT STRING IDENTIK DENGAN CHROMA DB ---
+            if tipe == 'barang':
+                detail_bersih = bersihkan_html(spesifikasi_html)
+                
+                info_bundling = ""
+                if jasa_bundle:
+                    info_bundling = f"Jasa Bundling/Pemasangan Wajib: {jasa_bundle} (Biaya Tambahan Jasa: Rp{harga_bundle}). "
+                
+                teks_gabungan = (
+                    f"Nama Produk: {nama}. "
+                    f"Kategori: {kategori}. "
+                    f"Merek: {merek}. "
+                    f"Harga Unit Produk: Rp{harga}. "
+                    f"Keterangan Singkat: {keterangan}. "
+                    f"{info_bundling}"
+                    f"Spesifikasi Detail: {detail_bersih}."
+                )
+            else:
+                # Format untuk Jasa
+                teks_gabungan = (
+                    f"Nama Layanan: {nama}. "
+                    f"Kategori: {kategori}. "
+                    f"Harga Dasar: Rp{harga}. "
+                    f"Keterangan Layanan: {keterangan}."
+                )
                 
             hasil_sql.append({
                 "id_referensi": id_ref,
                 "tipe_item": tipe,
                 "sumber": "PostgreSQL (Keyword Exact Match)",
-                "teks_gabungan": teks
+                "teks_gabungan": teks_gabungan
             })
             
         cursor.close()
@@ -260,31 +313,53 @@ def jalankan_pencarian_sql(kata_kunci: str):
         print(f"[SQL ERROR] Gagal menjalankan SQL Search: {e}")
         
     return hasil_sql
-
 @tool
-def cari_katalog_produk(kata_kunci: str) -> str:
-    """Gunakan tool ini untuk mencari informasi produk AC, spesifikasi, dan layanan (Jasa Pasang/Cuci AC).
-    PENTING: Buatlah 'kata_kunci' yang PANJANG dan DESKRIPTIF."""
+def cari_katalog_produk(kata_kunci: str, jenis_item: str) -> str:
+    """
+    Gunakan alat ini untuk mencari informasi produk AC, spesifikasi, dan layanan (Jasa Pasang/Cuci AC) di database.
+    
+    Argumen:
+    - kata_kunci: Kata teknis spesifik (misal: "LG Inverter 1 PK", "Daikin", "Cuci AC Split"). Buat PANJANG dan DESKRIPTIF.
+    - jenis_item: WAJIB diisi dengan salah satu dari dua kata ini: "produk" atau "jasa". 
+      Pilih "produk" jika pelanggan mencari barang fisik (AC, CCTV).
+      Pilih "jasa" jika pelanggan mencari layanan teknisi (pasang, bongkar, cuci, perbaikan).
+    """
     
     try:
         print(f"\n==================================================")
-        print(f"⚙️ [HYBRID SEARCH DIMULAI] Kata Kunci: '{kata_kunci}'")
+        print(f"⚙️ [HYBRID SEARCH DIMULAI] Mencari {jenis_item.upper()} | Kata Kunci: '{kata_kunci}'")
         print(f"==================================================")
         
-        # 1. AMBIL DARI CHROMA DB (Semantic Search)
+        # 1. TENTUKAN FILTER METADATA UNTUK CHROMA DB
+        # Sesuaikan key "tipe_item" dengan skema metadata databasemu
+        if jenis_item.lower() == "produk":
+            filter_metadata = {"tipe_item": "produk"}
+        elif jenis_item.lower() == "jasa":
+            filter_metadata = {"tipe_item": "jasa"}
+        else:
+            filter_metadata = None # Fallback jika AI salah mengisi parameter
+
+        # 2. AMBIL DARI CHROMA DB (Semantic Search)
         db_katalog = get_vector_katalog_db()
-        hasil_vektor = db_katalog.similarity_search(kata_kunci, k=5) # Ambil 2 teratas
+        try:
+            if filter_metadata:
+                hasil_vektor = db_katalog.similarity_search(kata_kunci, k=5, filter=filter_metadata)
+            else:
+                hasil_vektor = db_katalog.similarity_search(kata_kunci, k=5)
+        except Exception as e:
+            print(f"❌ Terjadi Kesalahan pada Chroma DB: {e}")
+            hasil_vektor = [] # Kosongkan hasil jika error
         
         print("\n🔍 [DEBUG 1] HASIL SEMANTIC (CHROMA DB) - TOP 5:")
         if not hasil_vektor:
             print("   (Tidak ada hasil dari AI)")
         for i, doc in enumerate(hasil_vektor):
-            # Potong teks agar tidak terlalu panjang di layar
             teks_cuplikan = doc.page_content[:120].replace('\n', ' ')
             print(f"   {i+1}. [{doc.metadata.get('id_referensi')}] {teks_cuplikan}...")
             
-        # 2. AMBIL DARI POSTGRESQL (Lexical/Rule-based Search)
-        hasil_sql = jalankan_pencarian_sql(kata_kunci)
+        # 3. AMBIL DARI POSTGRESQL (Lexical/Rule-based Search)
+        # Parameter jenis_item dilempar ke fungsi SQL untuk memfilter hasilnya
+        hasil_sql = jalankan_pencarian_sql(kata_kunci, jenis_item)
         
         print("\n🔍 [DEBUG 2] HASIL LEXICAL (POSTGRESQL) - TOP 5:")
         if not hasil_sql:
@@ -293,35 +368,54 @@ def cari_katalog_produk(kata_kunci: str) -> str:
             teks_cuplikan = item['teks_gabungan'][:120].replace('\n', ' ')
             print(f"   {i+1}. [{item['id_referensi']}] {teks_cuplikan}...")
             
-        # 3. PENGGABUNGAN (FUSION) & MENGHAPUS DUPLIKASI
+        # 4. PENGGABUNGAN (FUSION) MENGGUNAKAN RRF (Reciprocal Rank Fusion)
+        K_CONSTANT = 60
+        rrf_scores = {}
         katalog_final_dict = {} 
         
-        # Masukkan hasil SQL terlebih dahulu
-        for item in hasil_sql[:2]:
-            katalog_final_dict[item["id_referensi"]] = item
+        # a) Hitung skor RRF untuk hasil Lexical (SQL)
+        for rank_idx, item in enumerate(hasil_sql):
+            id_ref = item["id_referensi"]
+            rank = rank_idx + 1 # Rank mulai dari 1
+            rrf_scores[id_ref] = rrf_scores.get(id_ref, 0.0) + (1.0 / (K_CONSTANT + rank))
+            katalog_final_dict[id_ref] = item
             
-        # Masukkan hasil Vektor (Jika ID sudah ada, akan otomatis di-skip)
-        for doc in hasil_vektor[:3]:
+        # b) Hitung skor RRF untuk hasil Semantic (Vector Chroma)
+        for rank_idx, doc in enumerate(hasil_vektor):
             id_ref = doc.metadata.get('id_referensi')
+            if not id_ref:
+                continue # Skip jika doc tidak memiliki id_referensi
+
+            rank = rank_idx + 1 # Rank mulai dari 1
+            rrf_scores[id_ref] = rrf_scores.get(id_ref, 0.0) + (1.0 / (K_CONSTANT + rank))
+            
             if id_ref not in katalog_final_dict:
                 katalog_final_dict[id_ref] = {
                     "id_referensi": id_ref,
-                    "tipe_item": doc.metadata.get('tipe_item', 'umum'),
+                    "tipe_item": doc.metadata.get('kategori', jenis_item),
                     "sumber": "Chroma DB (Semantic Search)",
                     "teks_gabungan": doc.page_content
                 }
                 
-        # 4. POTONG HASIL GABUNGAN MENJADI MAKSIMAL 4 SAJA
-        # (Agar hasil Vektor tidak terbuang jika SQL mendominasi urutan awal)
-        katalog_final_list = list(katalog_final_dict.values())        
-        print("\n🔗 [DEBUG 3] HASIL GABUNGAN FINAL (DIPOTONG JADI TOP 4):")
+        # c) Urutkan ulang berdasarkan nilai RRF tertinggi
+        sorted_rrf_ids = sorted(rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True)
+
+        # 5. POTONG HASIL GABUNGAN MENJADI MAKSIMAL 4 SAJA
+        katalog_final_list = []
+        for id_ref in sorted_rrf_ids[:4]:
+            item = katalog_final_dict[id_ref]
+            # Update sumber untuk menampilkan skor RRF di debug
+            item["sumber"] += f" [RRF Score: {rrf_scores[id_ref]:.4f}]"
+            katalog_final_list.append(item)
+            
+        print("\n🔗 [DEBUG 3] HASIL GABUNGAN FINAL DENGAN RRF (DIPOTONG JADI TOP 4):")
         for i, item in enumerate(katalog_final_list):
             print(f"   {i+1}. [{item['id_referensi']}] (Sumber: {item['sumber']})")
         print(f"==================================================\n")
 
-        # 5. FORMAT OUTPUT UNTUK DIKIRIM KE GEMINI
+        # 6. FORMAT OUTPUT UNTUK DIKIRIM KE GEMINI
         if not katalog_final_list:
-            return f"Maaf, tidak ditemukan data yang relevan dengan '{kata_kunci}'."
+            return f"Maaf, tidak ditemukan data yang relevan dengan '{kata_kunci}' pada kategori '{jenis_item}'."
             
         hasil_teks = f"Ditemukan {len(katalog_final_list)} hasil (Kombinasi AI dan Database):\n\n"
         for item in katalog_final_list:

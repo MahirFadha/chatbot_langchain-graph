@@ -25,7 +25,7 @@ def inisialisasi_vektor_awal():
 def setup_sop_chroma():
     """Membaca file txt, memotong teks, dan menjadikannya Vector DB SOP"""
     embedding_model = get_embedding_model()
-    persist_dir = "./database/chroma/db_sop"
+    persist_dir = "./data/chroma/db_sop"
     
     if not os.path.exists(persist_dir):
         print("Membangun Vector DB SOP...")
@@ -58,7 +58,7 @@ def bersihkan_html(teks_html):
 
 def setup_katalog_chroma():
     embedding_model = get_embedding_model()
-    persist_dir_katalog = "./database/chroma/db_katalog"
+    persist_dir_katalog = "./data/chroma/db_katalog"
 
     # Jika folder Vector DB belum ada, kita bangun dari Postgres
     if not os.path.exists(persist_dir_katalog):
@@ -84,7 +84,7 @@ def setup_katalog_chroma():
                 LEFT JOIN catalog.brands b ON p.kdmerk = b.kdmerk
                 LEFT JOIN catalog.jenis_products j ON p.kdjens = j.kdjens
                 LEFT JOIN catalog.product_detail pd ON p.kdprod = pd.kdprod
-                LEFT JOIN catalog.service_items s ON p.srvc_id = s.srvc_id; -- TAMBAHAN: Relasi service
+                LEFT JOIN catalog.service_items s ON p.srvc_id = s.srvc_id;
             """
             cursor.execute(query_produk)
             produk_rows = cursor.fetchall()
@@ -97,28 +97,27 @@ def setup_katalog_chroma():
                 nmmerk = row[4] or "Tanpa Merek"
                 nmjens = row[5] or "Umum"
                 detail_html = row[6] or ""
-                srvc_name = row[7] # Nama jasa bundling (bisa None)
-                srvc_price = row[8] # Harga jasa bundling (bisa None)
+                srvc_name = row[7] 
+                srvc_price = row[8] 
                 
                 detail_bersih = bersihkan_html(detail_html)
                 
-                # RAKIT LOGIKA BUNDLING SERVICE
                 info_bundling = ""
                 if srvc_name:
                     harga_jasa = srvc_price or 0
                     info_bundling = f"Jasa Bundling/Pemasangan Wajib: {srvc_name} (Biaya Tambahan Jasa: Rp{harga_jasa}). "
                 
-                # Merakit TEKS GABUNGAN
                 teks_gabungan = (
                     f"Nama Produk: {prod_name}. "
                     f"Kategori: {nmjens}. "
                     f"Merek: {nmmerk}. "
                     f"Harga Unit Produk: Rp{price}. "
                     f"Keterangan Singkat: {ket_prod}. "
-                    f"{info_bundling}" # <--- AI AKAN MEMBACA BIAYA WAJIB INI
+                    f"{info_bundling}" 
                     f"Spesifikasi Detail: {detail_bersih}."
                 )
                 
+                # METADATA "produk" DITAMBAHKAN
                 doc = Document(
                     page_content=teks_gabungan,
                     metadata={"id_referensi": kdprod, "tipe_item": "produk", "merek": nmmerk}
@@ -126,70 +125,59 @@ def setup_katalog_chroma():
                 dokumen_katalog.append(doc)
 
             # ==========================================
-            # 2. AMBIL DAN RAKIT DATA LAYANAN (Jasa Servis/Cuci)
+            # 2. AMBIL DAN RAKIT DATA JASA (SERVICE)
             # ==========================================
-            query_layanan = """
-                SELECT 
-                    s.srvc_id, s.srvc_name, s.base_price, s.srvc_desc,
-                    sp.srv_package_name,
-                    sd.prob_detail
-                FROM catalog.service_items s
-                LEFT JOIN catalog.service_packages sp ON s.srvprodid = sp.srv_prodid
-                LEFT JOIN catalog.service_detail sd ON s.srvc_id = sd.srvc_id;
+            query_jasa = """
+                SELECT srvc_id, srvc_name, base_price, srvc_desc
+                FROM catalog.service_items
+                WHERE is_active = true;
             """
-            cursor.execute(query_layanan)
-            layanan_rows = cursor.fetchall()
-            
-            for row in layanan_rows:
+            cursor.execute(query_jasa)
+            jasa_rows = cursor.fetchall()
+
+            for row in jasa_rows:
                 srvc_id = row[0] or ""
-                srvc_name = row[1] or "Layanan Tanpa Nama"
+                srvc_name = row[1] or "Tanpa Nama"
                 base_price = row[2] or 0
                 srvc_desc = row[3] or ""
-                paket = row[4] or "Paket Standar"
-                prob_html = row[5] or ""
-                
-                prob_bersih = bersihkan_html(prob_html)
-                
-                # Merakit TEKS GABUNGAN
-                teks_gabungan = (
+
+                teks_jasa = (
                     f"Nama Layanan: {srvc_name}. "
-                    f"Kategori Paket: {paket}. "
+                    f"Kategori: Jasa. "
                     f"Harga Dasar: Rp{base_price}. "
-                    f"Keterangan Layanan: {srvc_desc}. "
-                    f"Detail Pengerjaan/Masalah: {prob_bersih}."
+                    f"Keterangan Layanan: {srvc_desc}."
                 )
                 
+                # METADATA "jasa" DITAMBAHKAN
                 doc = Document(
-                    page_content=teks_gabungan,
-                    metadata={"id_referensi": srvc_id, "tipe_item": "layanan", "kategori": paket}
+                    page_content=teks_jasa,
+                    metadata={"id_referensi": srvc_id, "tipe_item": "jasa", "merek": "Aire Optima"}
                 )
                 dokumen_katalog.append(doc)
-
-            # ==========================================
-            # 3. PROSES VEKTORISASI KE CHROMA DB
-            # ==========================================
-            db_katalog = Chroma.from_documents(
-                documents=dokumen_katalog, 
-                embedding=embedding_model, 
-                persist_directory=persist_dir_katalog
-            )
-            
+                
             cursor.close()
             conn.close()
-            print(f"Berhasil memvektorisasi {len(dokumen_katalog)} item katalog ke Chroma DB!")
             
+            # Memasukkan ke Vector DB
+            if dokumen_katalog:
+                Chroma.from_documents(
+                    documents=dokumen_katalog, 
+                    embedding=embedding_model, 
+                    persist_directory=persist_dir_katalog
+                )
+                print("✅ Vector DB berhasil dibangun dengan metadata lengkap!")
+                
         except Exception as e:
-            print(f"GAGAL MEMBANGUN VEKTOR KATALOG: {e}")
-            raise e
-            
-    else:
-        # Jika folder sudah ada, cukup load modelnya
+            print(f"❌ Error membangun Vector DB: {e}")
+    try:
         db_katalog = Chroma(
-            persist_directory=persist_dir_katalog, 
+            persist_directory=persist_dir_katalog,
             embedding_function=embedding_model
         )
-        
-    return db_katalog
+        return db_katalog
+    except Exception as e:
+        print(f"❌ Error saat memuat Chroma DB: {e}")
+        return None
 
 def get_vector_katalog_db():
     """Fungsi ini dipanggil oleh Tool. Sangat cepat karena mengambil dari RAM/Memory."""

@@ -1,9 +1,13 @@
-from utils.security import ubah_status_bot_manual
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
-import uvicorn
+from utils.security import bersihkan_memori_langgraph
 import asyncio
 import time
+import uvicorn
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
+
+# =================================================================
+# 📥 IMPOR FUNGSI & SERVICES
+# =================================================================
 from utils.security import (
     cek_izin_dan_update_interaksi, 
     ubah_status_bot_manual, 
@@ -17,97 +21,83 @@ from services.waha_services import waha_sedang_mengetik, waha_kirim_balasan, wah
 from graph.builder import rakit_pabrik_cs, tutup_pabrik_cs
 from data.vector_manager import inisialisasi_vektor_awal
 
+# ✨ BARU: Impor modul sinkronisasi dan scheduler
+from apscheduler.schedulers.background import BackgroundScheduler
+from services.sync_catalog import run_all_sync 
+
 agen = None
+
+# =================================================================
+# ⚙️ SETUP BACKGROUND SCHEDULER
+# =================================================================
+scheduler = BackgroundScheduler()
+
+# Atur jadwal sinkronisasi (Contoh: Berjalan setiap 3 hari sekali)
+scheduler.add_job(run_all_sync, 'interval', days=3)
+
+# Opsi lain jika ingin jalan setiap jam 02:00 pagi setiap hari:
+# scheduler.add_job(run_all_sync, 'cron', hour=2, minute=0)
 
 # =================================================================
 # 📥 KOTAK SURAT SEMENTARA (MESSAGE BUFFERING)
 # =================================================================
-# Struktur: { "62812xxx@c.us": {"messages": ["p", "mau nanya"], "timer": <Task_Object>} }
 CHAT_BUFFER = {}
-WAKTU_TUNGGU_DETIK = 10 # Tunggu 10 detik sebelum membalas
+WAKTU_TUNGGU_DETIK = 10 
 
 async def proses_chat_dari_buffer(chat_id: str):
-    """
-    Fungsi ini dipanggil oleh Alarm/Timer saat waktunya habis.
-    Ia akan menggabungkan chat, melempar ke AI, dan mengirim balasan.
-    """
-    # 1. Ambil semua pesan yang sudah terkumpul
     data_buffer = CHAT_BUFFER.pop(chat_id, None)
     if not data_buffer or not data_buffer["messages"]:
         return
 
-    # Gabungkan dengan spasi/titik koma
     pesan_gabungan = ". ".join(data_buffer["messages"])
-    
     print(f"\n[BUFFER SELESAI] 📦 Menggabungkan pesan {chat_id}: '{pesan_gabungan}'")
-    # 1. Centang Biru (Tandai dibaca)
+    
     waha_tandai_dibaca(chat_id)
 
-    # 2. Hitung Jeda Waktu Baca Dinamis
-    # Asumsi: Kecepatan baca manusia rata-rata 4 kata per detik.
     jumlah_kata = len(pesan_gabungan.split())
     waktu_baca_kalkulasi = jumlah_kata / 4.0
-
-    # Pasang batas: Minimal 1.5 detik, Maksimal 6.0 detik (agar tidak kelamaan)
     waktu_jeda = max(1.5, min(waktu_baca_kalkulasi, 6.0))
 
     print(f"⏱️ [UX] Simulasi membaca {jumlah_kata} kata selama {waktu_jeda:.1f} detik...")
     time.sleep(waktu_jeda)
 
-    # 3. Pura-pura mulai mengetik...
     waha_sedang_mengetik(chat_id)
 
-    # 2. Lempar ke LangGraph (Otak AI)
     config = {"configurable": {"thread_id": chat_id}}
     
     try:
         print("[LANGGRAPH] 🧠 Sedang memikirkan jawaban...")
         hasil_ai = agen.invoke({"messages": [("user", pesan_gabungan)]}, config)
         
-        # --- PERBAIKAN: EKSTRAK TEKS (KARDUS VS KERTAS) ---
         raw_content = hasil_ai["messages"][-1].content
         
         if isinstance(raw_content, list):
             teks_balasan = "".join([item["text"] for item in raw_content if "text" in item])
         else:
             teks_balasan = str(raw_content)
-        # ---------------------------------------------------
         
-        # 3. Kirim balasan
         waha_kirim_balasan(chat_id, teks_balasan)
         print(f"📤 [BALASAN AI] : {teks_balasan}\n")
     except Exception as e:
         print(f"❌ [ERROR AI]: {str(e)}")
 
-
 def tambah_ke_buffer(chat_id: str, teks_pesan: str):
-    """
-    Memasukkan pesan baru ke kotak surat dan me-reset Alarm/Timer.
-    """
-        
     if chat_id not in CHAT_BUFFER:
-        # Jika belum ada di buffer, buat baru
         CHAT_BUFFER[chat_id] = {
             "messages": [teks_pesan],
-            "timer": None # Akan diisi di bawah
+            "timer": None
         }
     else:
-        # Jika sudah ada, tambahkan ke ujung list
         CHAT_BUFFER[chat_id]["messages"].append(teks_pesan)
-        
-        # Jika ada timer lama yang sedang berjalan, BATALKAN (Reset)
         if CHAT_BUFFER[chat_id]["timer"]:
             CHAT_BUFFER[chat_id]["timer"].cancel()
             print(f"[BUFFER] ⏱️ Chat baru masuk dari {chat_id}. Timer di-reset!")
 
-    # Setel/Buat Timer Baru (Alarm)
-    # create_task akan menjalankan fungsi sleep & proses_chat_dari_buffer di background
     async def jalankan_timer():
         await asyncio.sleep(WAKTU_TUNGGU_DETIK)
         await proses_chat_dari_buffer(chat_id)
         
     CHAT_BUFFER[chat_id]["timer"] = asyncio.create_task(jalankan_timer())
-
 
 # =================================================================
 # SIKLUS SERVER & ENDPOINT WEBHOOK
@@ -118,27 +108,41 @@ async def lifespan(app: FastAPI):
     print("\n[SYSTEM] ⚙️ Menginisialisasi Vector DB dan Agen AI...")
     inisialisasi_vektor_awal()
     agen = rakit_pabrik_cs()
-    print("[SYSTEM] ✅ Otak AI Siap Melayani!\n")
-    yield
+    
+    print("[SYSTEM] ⏰ Menjalankan tugas Garbage Collector (Jam 03:00 pagi)...")
+    scheduler.add_job(
+        bersihkan_memori_langgraph, 
+        'cron', 
+        hour=3, 
+        minute=0,
+        id='hapus_memori_langgraph',  # Sabuk pengaman agar tidak ganda
+        replace_existing=True         # Timpa jadwal lama jika server direstart
+    )
+    
+    print("[SYSTEM] ⏰ Menyalakan Background Scheduler (Katalog Sync)...")
+    scheduler.start()
+    
+    print("[SYSTEM] ✅ Otak AI & Scheduler Siap Melayani!\n")
+    
+    yield  # Server berjalan di titik ini...
+    
     print("\n[SYSTEM] 🛑 Mematikan Server...\n")
     
-    # 1. Batalkan semua antrean timer
+    # ✨ BARU: Mematikan Scheduler dengan aman
+    print("[SYSTEM] ⏰ Mematikan Background Scheduler...")
+    scheduler.shutdown()
+    
     for chat_id, data in CHAT_BUFFER.items():
         if data.get("timer"):
             data["timer"].cancel()
             
     print("[SYSTEM] 🧹 Membersihkan sisa antrean tugas...")
-    await asyncio.sleep(0.5) # Beri waktu sejenak agar asnycio membatalkan tugas
+    await asyncio.sleep(0.5)
 
-    # 2. Tutup kolam koneksi
     tutup_pabrik_cs()
     print("[SYSTEM] ✅ Koneksi Database LangGraph (Pool) ditutup dengan aman.\n")
 
 app = FastAPI(title="Aire Optima AI API", lifespan=lifespan)
-
-# Pastikan kamu import fungsi normalisasinya di bagian atas file!
-# from services.waha_services import normalisasi_id_waha 
-# (Sesuaikan dengan lokasi file-mu)
 
 @app.post("/webhook")
 async def terima_pesan_waha(request: Request):
@@ -158,14 +162,11 @@ async def terima_pesan_waha(request: Request):
             # =======================================================
             id_pengirim = normalisasi_id_waha(id_pengirim_mentah)
             id_penerima = normalisasi_id_waha(id_penerima_mentah)
-            # =======================================================
 
             # =======================================================
             # 🎛️ PUSAT KENDALI (Admin chat ke dirinya sendiri)
             # =======================================================
             if from_me and id_pengirim == id_penerima:
-                
-                # --- MENU BANTUAN (TEMPLATE) ---
                 menu_bantuan = (
                     "🛠️ *PUSAT KENDALI ADMIN* 🛠️\n\n"
                     "Daftar perintah yang tersedia:\n"
@@ -178,12 +179,9 @@ async def terima_pesan_waha(request: Request):
                     "🔹 */list command* - Menampilkan pesan bantuan ini.\n"
                 )
 
-                # --- PENGECEKAN COMMAND ---
                 if teks_pesan.startswith("/bot off "):
-                    # Admin bebas mengetik "0812..." atau "62812...", kita normalisasi juga!
                     nomor_input = teks_pesan.replace("/bot off ", "").strip()
                     nomor_target = normalisasi_id_waha(nomor_input)
-                    
                     hasil = ubah_status_bot_manual(nomor_target, False)
                     waha_kirim_balasan(id_pengirim, hasil)
                     return {"status": "Command /bot off dieksekusi"}
@@ -191,7 +189,6 @@ async def terima_pesan_waha(request: Request):
                 elif teks_pesan.startswith("/bot on "):
                     nomor_input = teks_pesan.replace("/bot on ", "").strip()
                     nomor_target = normalisasi_id_waha(nomor_input)
-                    
                     hasil = ubah_status_bot_manual(nomor_target, True)
                     waha_kirim_balasan(id_pengirim, hasil)
                     return {"status": "Command /bot on dieksekusi"}
@@ -226,7 +223,6 @@ async def terima_pesan_waha(request: Request):
                     waha_kirim_balasan(id_pengirim, menu_bantuan)
                     return {"status": "Command /list_command dieksekusi"}
 
-                # --- FALLBACK (JIKA ADMIN TYPO / COMMAND TIDAK DIKENAL) ---
                 elif teks_pesan.startswith("/"):
                     pesan_typo = f"⚠️ *Perintah '{teks_pesan}' tidak dikenali atau salah ketik!*\n\n{menu_bantuan}"
                     waha_kirim_balasan(id_pengirim, pesan_typo)
@@ -244,11 +240,11 @@ async def terima_pesan_waha(request: Request):
             if not teks_pesan:
                 return {"status": "Pesan bukan teks"}
 
-            # 1. Panggil Satpam (Menggunakan ID yang sudah dinormalisasi)
+            # 1. Panggil Satpam
             if not cek_izin_dan_update_interaksi(id_pengirim, teks_pesan):
                 return {"status": "Ditolak Satpam"}
 
-            # 2. Masukkan ke Buffer (Menggunakan ID yang sudah dinormalisasi)
+            # 2. Masukkan ke Buffer
             tambah_ke_buffer(id_pengirim, teks_pesan)
 
             return {"status": "Sukses dimasukkan buffer"}
