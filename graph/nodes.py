@@ -4,14 +4,13 @@ from langgraph.prebuilt import ToolNode
 from graph.state import AgentState
 from llm.gemini_client import get_llm
 from tools.check_catalog import cari_katalog_produk
-from tools.check_order import cek_status_pesanan
 from tools.order_manager import catat_pesanan_baru, ubah_jadwal_pesanan, batalkan_pesanan
 from data.vector_manager import get_sop_tool
 from data.database import ambil_data_pelanggan_lama
 
 # 1. Kumpulkan semua alat LangChain
 tool_sop = get_sop_tool()
-daftar_tools = [cari_katalog_produk, cek_status_pesanan, catat_pesanan_baru, ubah_jadwal_pesanan, batalkan_pesanan, tool_sop]
+daftar_tools = [cari_katalog_produk, catat_pesanan_baru, ubah_jadwal_pesanan, batalkan_pesanan, tool_sop]
 
 # 2. PEKERJA 1: EKSEKUTOR ALAT
 node_eksekutor_alat = ToolNode(daftar_tools)
