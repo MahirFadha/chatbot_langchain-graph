@@ -396,6 +396,9 @@ def cari_katalog_produk(kata_kunci: str, jenis_item: str) -> str:
                     "sumber": "Chroma DB (Semantic Search)",
                     "teks_gabungan": doc.page_content
                 }
+            else:
+                # Item sudah ada dari SQL — tandai sebagai Hybrid
+                katalog_final_dict[id_ref]["sumber"] = "Hybrid (Semantic + Lexical)"
                 
         # c) Urutkan ulang berdasarkan nilai RRF tertinggi
         sorted_rrf_ids = sorted(rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True)

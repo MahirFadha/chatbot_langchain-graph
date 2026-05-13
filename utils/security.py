@@ -46,18 +46,7 @@ def cek_izin_dan_update_interaksi(chat_id: str, teks_pesan: str = ""):
                 if re.search(pola_regex, pesan_lower):
                     print(f"🚨 [SATPAM] Pelanggaran! Kata '{kata_kotor}' (Kategori: {kategori_kata}).")
                     
-                    # Balasan disesuaikan kategori, TAPI eksekusinya SAMA (Matikan Bot)
-                    if kategori_kata == "kasar":
-                        pesan_balasan = "Mohon maaf, tolong gunakan bahasa yang sopan. Apakah ada yang bisa saya bantu?"
-                    else:
-                        pesan_balasan = "Mohon maaf, kami tidak melayani pertanyaan mengenai hal tersebut. Apakah ada yang bisa saya bantu mengenai AC dan CCTV?"
-
-                    # Kirim peringatan ke user
-                    print(f"⏩ [DEBUG] Mencoba mengirim balasan moderasi ke {chat_id}...")
-                    waha_kirim_balasan(chat_id, pesan_balasan)
-                    print(f"✅ [DEBUG] Fungsi waha_kirim_balasan selesai dijalankan!")
-
-                    # Matikan bot
+                    # Matikan bot (Admin yang akan handle di WA)
                     cursor.execute("UPDATE public.customers SET bot_active = false WHERE id_customer = %s", (chat_id,))
                     conn.commit()
                     
@@ -74,6 +63,83 @@ def cek_izin_dan_update_interaksi(chat_id: str, teks_pesan: str = ""):
         conn.close()
         
     return diizinkan
+
+# =================================================================
+# 🛡️ FUNGSI SATPAM KHUSUS WEB (Tanpa kirim via WAHA)
+# =================================================================
+def cek_izin_dan_update_interaksi_web(session_id: str, teks_pesan: str = "") -> dict:
+    """
+    Versi web dari cek_izin_dan_update_interaksi.
+    Bedanya: tidak mengirim balasan via WAHA, return dict dengan status dan alasan.
+    
+    Fungsi ini tetap melakukan:
+    - Registrasi customer baru ke DB (jika belum ada)
+    - Moderasi kata blacklist
+    - Update last_interaction
+    
+    Return: {"allowed": True/False, "reason": "pesan peringatan jika blocked"}
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # 1. CEK APAKAH CUSTOMER SUDAH ADA, JIKA BELUM → DAFTARKAN
+        cursor.execute("SELECT bot_active FROM public.customers WHERE id_customer = %s", (session_id,))
+        row = cursor.fetchone()
+        
+        if row:
+            if row[0] == False:
+                print(f"🛑 [SATPAM WEB] Sesi {session_id} diblokir (bot_active = False).")
+                return {
+                    "allowed": False, 
+                    "reason": "Anda telah diblokir karena melanggar aturan penggunaan. Silakan hubungi admin untuk informasi lebih lanjut."
+                }
+        else:
+            # Customer baru dari web — daftarkan ke database
+            cursor.execute("""
+                INSERT INTO public.customers (id_customer, bot_active, total_orders, last_interaction)
+                VALUES (%s, true, 0, NOW())
+            """, (session_id,))
+            conn.commit()
+            print(f"[CHAT API] 🆕 Customer web baru terdaftar: {session_id}")
+
+        # 2. MODERASI KATA BLACKLIST
+        if teks_pesan:
+            pesan_lower = teks_pesan.lower()
+            cursor.execute("SELECT word, category FROM public.blacklisted_words")
+            bad_words_db = cursor.fetchall()
+            
+            for row_word in bad_words_db:
+                kata_kotor = row_word[0].lower().strip()
+                kategori_kata = row_word[1].lower() if row_word[1] else "umum"
+                pola_regex = r'\b' + re.escape(kata_kotor) + r'\b'
+                
+                if re.search(pola_regex, pesan_lower):
+                    print(f"🚨 [SATPAM WEB] Pelanggaran dari {session_id}! Kata: '{kata_kotor}' (Kategori: {kategori_kata})")
+                    
+                    # Matikan bot untuk session ini
+                    cursor.execute("UPDATE public.customers SET bot_active = false WHERE id_customer = %s", (session_id,))
+                    conn.commit()
+                    
+                    # Pesan peringatan sesuai kategori
+                    if kategori_kata == "kasar":
+                        reason = "Anda diblokir karena menggunakan bahasa kasar. Mohon gunakan bahasa yang sopan saat berkomunikasi."
+                    else:
+                        reason = "Anda diblokir karena mengirimkan konten yang tidak sesuai. Kami hanya melayani pertanyaan seputar AC dan CCTV."
+                    
+                    return {"allowed": False, "reason": reason}
+
+        # 3. UPDATE LAST INTERACTION
+        cursor.execute("UPDATE public.customers SET last_interaction = NOW() WHERE id_customer = %s", (session_id,))
+        conn.commit()
+        
+    except Exception as e:
+        print(f"❌ [SATPAM WEB ERROR] {e}")
+    finally:
+        cursor.close()
+        conn.close()
+        
+    return {"allowed": True, "reason": ""}
 
 def ubah_status_bot_manual(input_admin: str, status: bool):
     """Dipanggil dari Pusat Kendali (Admin chat '/bot off' ke diri sendiri)"""

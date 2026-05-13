@@ -4,12 +4,14 @@ import time
 import uvicorn
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
+from pydantic import BaseModel
 
 # =================================================================
 # 📥 IMPOR FUNGSI & SERVICES
 # =================================================================
 from utils.security import (
     cek_izin_dan_update_interaksi, 
+    cek_izin_dan_update_interaksi_web,
     ubah_status_bot_manual, 
     tambah_kata_blacklist, 
     hapus_kata_blacklist,
@@ -253,6 +255,100 @@ async def terima_pesan_waha(request: Request):
         import traceback
         traceback.print_exc()
         return {"error": str(e)}
+
+# =================================================================
+# 🌐 ENDPOINT CHAT CUSTOM (Website / Postman / Platform Lain)
+# =================================================================
+class ChatRequest(BaseModel):
+    session_id: str
+    message: str
+
+class ChatResponse(BaseModel):
+    session_id: str
+    reply: str
+    blocked: bool = False  # True jika ditolak moderasi
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat_endpoint(request: ChatRequest):
+    """
+    Endpoint universal untuk chatbot website atau platform lain.
+    Tidak bergantung pada WAHA — balasan langsung di response.
+    
+    Alur sama persis dengan WAHA:
+    1. Registrasi customer baru (jika belum ada di DB)
+    2. Moderasi kata (blacklist check)
+    3. Proses AI via LangGraph
+    4. Return balasan langsung di response
+    
+    Contoh request:
+    {
+        "session_id": "web-user-abc123",
+        "message": "Halo, mau tanya harga AC"
+    }
+    """
+    try:
+        teks_pesan = request.message.strip()
+        
+        if not teks_pesan:
+            return ChatResponse(
+                session_id=request.session_id,
+                reply="Maaf, pesan tidak boleh kosong.",
+                blocked=False
+            )
+
+        # =======================================================
+        # STEP 1: SATPAM (Registrasi + Moderasi) — SAMA SEPERTI WAHA
+        # =======================================================
+        hasil_satpam = cek_izin_dan_update_interaksi_web(request.session_id, teks_pesan)
+        
+        if not hasil_satpam["allowed"]:
+            # Delay sebelum balas (simulasi "membaca" pesan)
+            await asyncio.sleep(3)
+            return ChatResponse(
+                session_id=request.session_id,
+                reply=hasil_satpam["reason"],
+                blocked=True
+            )
+
+        # =======================================================
+        # STEP 2: SIMULASI DELAY "MENGETIK" — UX LEBIH NATURAL
+        # =======================================================
+        jumlah_kata = len(teks_pesan.split())
+        waktu_baca = max(1.5, min(jumlah_kata / 4.0, 4.0))  # 1.5 - 4 detik
+        print(f"⏱️ [CHAT API] Simulasi membaca {jumlah_kata} kata selama {waktu_baca:.1f} detik...")
+        await asyncio.sleep(waktu_baca)
+
+        # =======================================================
+        # STEP 3: PROSES AI (LangGraph) — SAMA SEPERTI WAHA
+        # =======================================================
+        config = {"configurable": {"thread_id": request.session_id}}
+
+        print(f"\n[CHAT API] 💬 Pesan masuk dari sesi '{request.session_id}': {teks_pesan}")
+
+        hasil_ai = agen.invoke({"messages": [("user", teks_pesan)]}, config)
+
+        raw_content = hasil_ai["messages"][-1].content
+
+        if isinstance(raw_content, list):
+            teks_balasan = "".join([item["text"] for item in raw_content if "text" in item])
+        else:
+            teks_balasan = str(raw_content)
+
+        print(f"[CHAT API] 📤 Balasan: {teks_balasan}\n")
+
+        return ChatResponse(
+            session_id=request.session_id,
+            reply=teks_balasan,
+            blocked=False
+        )
+
+    except Exception as e:
+        print(f"❌ [CHAT API ERROR]: {str(e)}")
+        return ChatResponse(
+            session_id=request.session_id,
+            reply="Maaf, terjadi kesalahan pada sistem. Silakan coba lagi nanti.",
+            blocked=False
+        )
 
 if __name__ == "__main__":
     uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
