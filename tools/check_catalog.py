@@ -47,7 +47,7 @@ def jalankan_pencarian_sql(kata_kunci: str, jenis_item: str = ""):
         q,
         trim(regexp_replace(
           q_clean0,
-          '\\b(ac|merk|merek|brand|tipe|type|jenis|yang|tolong|pesan|cari|buat|dong|aja|nih|ya|bang|kak|min)\\b',
+          '\\b(merk|merek|brand|tipe|type|jenis|yang|tolong|pesan|cari|buat|dong|aja|nih|ya|bang|kak|min)\\b',
           '',
           'g'
         )) AS q_clean1
@@ -243,6 +243,13 @@ def jalankan_pencarian_sql(kata_kunci: str, jenis_item: str = ""):
         OR match_ilike = true
         OR (sim_trgm >= 0.25 AND match_fts = true)
       )
+      AND
+      (
+        -- Hard filter: Jika user menyebut PK, hanya tampilkan item dengan PK yang cocok
+        (SELECT pk_user FROM pk_input) IS NULL
+        OR pk_match = 1
+        OR tipe_item = 'jasa'
+      )
     ORDER BY
       CASE
         WHEN (SELECT target FROM pk_input) = 'mixed'
@@ -341,11 +348,30 @@ def cari_katalog_produk(kata_kunci: str, jenis_item: str) -> str:
 
         # 2. AMBIL DARI CHROMA DB (Semantic Search)
         db_katalog = get_vector_katalog_db()
+        # Model e5 membutuhkan prefix "query: " untuk performa optimal
+        query_dengan_prefix = f"query: {kata_kunci}"
         try:
             if filter_metadata:
-                hasil_vektor = db_katalog.similarity_search(kata_kunci, k=5, filter=filter_metadata)
+                hasil_vektor = db_katalog.similarity_search(query_dengan_prefix, k=5, filter=filter_metadata)
             else:
-                hasil_vektor = db_katalog.similarity_search(kata_kunci, k=5)
+                hasil_vektor = db_katalog.similarity_search(query_dengan_prefix, k=5)
+            
+            # Post-filter: Jika user menyebut PK spesifik, buang hasil yang PK-nya beda
+            # Hanya berlaku untuk PRODUK — jasa punya range PK yang ditangani lexical
+            import re as _re
+            if jenis_item.lower() == "produk":
+                pk_match_input = _re.search(r'(\d+(?:\.\d+)?)\s*pk', kata_kunci.lower())
+                if pk_match_input:
+                    pk_diminta = pk_match_input.group(1)
+                    hasil_vektor_filtered = []
+                    for doc in hasil_vektor:
+                        pk_in_doc = _re.findall(r'(\d+(?:\.\d+)?)\s*PK', doc.page_content)
+                        if pk_in_doc:
+                            if pk_diminta in pk_in_doc:
+                                hasil_vektor_filtered.append(doc)
+                        else:
+                            hasil_vektor_filtered.append(doc)
+                    hasil_vektor = hasil_vektor_filtered
         except Exception as e:
             print(f"❌ Terjadi Kesalahan pada Chroma DB: {e}")
             hasil_vektor = [] # Kosongkan hasil jika error
@@ -369,32 +395,40 @@ def cari_katalog_produk(kata_kunci: str, jenis_item: str) -> str:
             print(f"   {i+1}. [{item['id_referensi']}] {teks_cuplikan}...")
             
         # 4. PENGGABUNGAN (FUSION) MENGGUNAKAN RRF (Reciprocal Rank Fusion)
+        # Bobot: Lexical lebih dipercaya karena exact match, Semantic sebagai pelengkap
         K_CONSTANT = 60
+        BOBOT_LEXICAL = 1.0
+        BOBOT_SEMANTIC = 1.0  # Semantic diberi bobot lebih rendah
         rrf_scores = {}
         katalog_final_dict = {} 
         
-        # a) Hitung skor RRF untuk hasil Lexical (SQL)
+        # a) Hitung skor RRF untuk hasil Lexical (SQL) — BOBOT PENUH
         for rank_idx, item in enumerate(hasil_sql):
             id_ref = item["id_referensi"]
-            rank = rank_idx + 1 # Rank mulai dari 1
-            rrf_scores[id_ref] = rrf_scores.get(id_ref, 0.0) + (1.0 / (K_CONSTANT + rank))
+            rank = rank_idx + 1
+            rrf_scores[id_ref] = rrf_scores.get(id_ref, 0.0) + (BOBOT_LEXICAL * (1.0 / (K_CONSTANT + rank)))
             katalog_final_dict[id_ref] = item
             
-        # b) Hitung skor RRF untuk hasil Semantic (Vector Chroma)
+        # b) Hitung skor RRF untuk hasil Semantic (Vector Chroma) — BOBOT LEBIH RENDAH
         for rank_idx, doc in enumerate(hasil_vektor):
             id_ref = doc.metadata.get('id_referensi')
             if not id_ref:
-                continue # Skip jika doc tidak memiliki id_referensi
+                continue
 
-            rank = rank_idx + 1 # Rank mulai dari 1
-            rrf_scores[id_ref] = rrf_scores.get(id_ref, 0.0) + (1.0 / (K_CONSTANT + rank))
+            rank = rank_idx + 1
+            rrf_scores[id_ref] = rrf_scores.get(id_ref, 0.0) + (BOBOT_SEMANTIC * (1.0 / (K_CONSTANT + rank)))
             
             if id_ref not in katalog_final_dict:
+                # Bersihkan prefix "passage: " dari teks sebelum disimpan
+                teks_bersih = doc.page_content
+                if teks_bersih.startswith("passage: "):
+                    teks_bersih = teks_bersih[9:]  # Hapus "passage: " (9 karakter)
+                    
                 katalog_final_dict[id_ref] = {
                     "id_referensi": id_ref,
                     "tipe_item": doc.metadata.get('kategori', jenis_item),
                     "sumber": "Chroma DB (Semantic Search)",
-                    "teks_gabungan": doc.page_content
+                    "teks_gabungan": teks_bersih
                 }
             else:
                 # Item sudah ada dari SQL — tandai sebagai Hybrid

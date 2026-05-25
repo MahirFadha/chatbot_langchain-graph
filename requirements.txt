@@ -20,3 +20,7 @@ psycopg[binary]
 psycopg_pool
 langgraph-checkpoint-postgres
 apscheduler
+ragas
+datasets
+pyarrow>=18.0.0
+datasets==2.21.0

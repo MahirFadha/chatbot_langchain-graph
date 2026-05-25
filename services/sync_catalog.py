@@ -45,7 +45,7 @@ def sync_core_jenis_packages():
             ON CONFLICT (cdcore) DO UPDATE SET crjens = EXCLUDED.crjens, synced_at = now(), is_active = true;
         """, (cdcore, crjens))
         
-        for jenis in core.get("data_jenis_prod", []):
+        for jenis in core.get("data_jenis_prod") or []:
             kdjens = jenis.get("kdjens")
             execute_query("""
                 INSERT INTO catalog.jenis_products (kdjens, cdcore, nmjens, title, "desc", icon_name, synced_at, is_active)
@@ -54,7 +54,7 @@ def sync_core_jenis_packages():
                 "desc" = EXCLUDED."desc", icon_name = EXCLUDED.icon_name, synced_at = now(), is_active = true;
             """, (kdjens, cdcore, jenis.get("nmjens"), jenis.get("title"), jenis.get("desc"), jenis.get("icon_name")))
             
-            for pkg in jenis.get("m_service_product", []):
+            for pkg in jenis.get("m_service_product") or []:
                 srv_prodid = pkg.get("srv_prodid")
                 if srv_prodid and srv_prodid not in seen_packages:
                     seen_packages.add(srv_prodid)
@@ -75,9 +75,9 @@ def sync_brands_products():
 
     for core in data_core:
         cdcore = core.get("cdcore")
-        for jenis in core.get("data_jenis_prod", []):
+        for jenis in core.get("data_jenis_prod") or []:
             kdjens = jenis.get("kdjens")
-            for merk in jenis.get("merks", []):
+            for merk in jenis.get("merks") or []:
                 kdmerk = merk.get("kdmerk")
                 nmmerk = merk.get("nmmerk").strip() if merk.get("nmmerk") else kdmerk
                 
@@ -88,7 +88,7 @@ def sync_brands_products():
                         ON CONFLICT (kdmerk) DO UPDATE SET nmmerk = EXCLUDED.nmmerk, synced_at = now(), is_active = true;
                     """, (kdmerk, nmmerk))
                 
-                for prod in merk.get("products", []):
+                for prod in merk.get("products") or []:
                     service_data = prod.get("service")
                     srvc_id = service_data.get("srvc_id") if service_data else None
                     service_json = json.dumps(service_data) if service_data else None

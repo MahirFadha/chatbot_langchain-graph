@@ -14,15 +14,14 @@ Admin manusia akan menghubungi pelanggan melalui WhatsApp untuk melakukan konfir
 Metode Pembayaran: Aire mendukung dua sistem pembayaran:
 Pembayaran di Awal: Mendukung metode Transfer Manual, QRIS, dan Multi Payment Online.
 Pembayaran di Akhir: Pembayaran dilakukan setelah jasa/pekerjaan selesai dilakukan oleh teknisi (Postpaid).
-Kebijakan Reschedule & Pembatalan: [Tuliskan di sini: Maksimal H-1 sebelum teknisi datang, atau apakah ada denda pembatalan sepihak di hari H].
+Kebijakan Reschedule & Pembatalan: Reschedule dan pembatalan bisa dilakukan selama teknisi belum perjalanan ke lokasi
 
 ## 3. Kebijakan Garansi & Purna Jual
-Garansi Jasa (Servis/Cuci/Pasang): [Tuliskan di sini: Contoh - Garansi cuci AC berlaku selama 7 hari, garansi pasang/bocor berlaku selama 30 hari].
-Garansi Produk: [Tuliskan di sini: Contoh - Unit AC baru mengikuti garansi resmi pabrik, unit CCTV garansi toko 1 tahun].
-Syarat Klaim: [Tuliskan di sini: Contoh - Wajib melampirkan nota digital dari sistem Aire dan merekam video bukti kerusakan].
+Garansi Jasa (Servis/Cuci/Pasang): Garansi servis, cuci AC berlaku selama 7 hari, sedangkan garansi pasang AC berlaku selama 30 hari.
+Garansi Produk: Untuk garansi produk mengikuti garansi dari pabrik brands produk
+Syarat Klaim: Tidak ada syarat tertentu, untuk pengajuan bisa melalui wa atau aplikasi Aire.co
 
-## 4. Persiapan Layanan & Biaya Tak Terduga (FAQ)
-Persiapan Kedatangan Teknisi: [Tuliskan di sini: Contoh - Harap pastikan ada akses jalan untuk tangga, dan minimal saldo token listrik tersedia].
+## 4. Biaya Tak Terduga (FAQ)
 Standar Biaya Tambahan (Surcharge):
 Surcharge Jam Malam: Terdapat biaya tambahan sebesar Rp50.000 untuk pengerjaan di luar jam kerja (jam 18.00 WIB - 00.00 WIB).
 Surcharge Apartemen: Terdapat biaya tambahan sebesar Rp25.000 untuk pengerjaan di lokasi Apartemen karena tingkat kesulitan akses dan perizinan gedung.

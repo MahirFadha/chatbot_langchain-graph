@@ -1,6 +1,6 @@
-from utils.security import bersihkan_memori_langgraph
 import asyncio
 import time
+import threading
 import uvicorn
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -17,7 +17,9 @@ from utils.security import (
     hapus_kata_blacklist,
     lihat_daftar_blacklist,
     lihat_pelanggan_bot_nonaktif,
-    normalisasi_id_waha
+    normalisasi_id_waha,
+    bersihkan_memori_langgraph
+    
 )
 from services.waha_services import waha_sedang_mengetik, waha_kirim_balasan, waha_tandai_dibaca
 from graph.builder import rakit_pabrik_cs, tutup_pabrik_cs
@@ -34,17 +36,14 @@ agen = None
 # =================================================================
 scheduler = BackgroundScheduler()
 
-# Atur jadwal sinkronisasi (Contoh: Berjalan setiap 3 hari sekali)
-scheduler.add_job(run_all_sync, 'interval', days=3)
-
-# Opsi lain jika ingin jalan setiap jam 02:00 pagi setiap hari:
-# scheduler.add_job(run_all_sync, 'cron', hour=2, minute=0)
+# Sinkronisasi katalog berjalan setiap 7 hari sekali (sync awal dilakukan saat startup)
+scheduler.add_job(run_all_sync, 'interval', days=7, id='sync_katalog', replace_existing=True)
 
 # =================================================================
 # 📥 KOTAK SURAT SEMENTARA (MESSAGE BUFFERING)
 # =================================================================
 CHAT_BUFFER = {}
-WAKTU_TUNGGU_DETIK = 10 
+WAKTU_TUNGGU_DETIK = 30
 
 async def proses_chat_dari_buffer(chat_id: str):
     data_buffer = CHAT_BUFFER.pop(chat_id, None)
@@ -111,17 +110,25 @@ async def lifespan(app: FastAPI):
     inisialisasi_vektor_awal()
     agen = rakit_pabrik_cs()
     
+    # Sync katalog saat server pertama kali nyala — selesaikan dulu sebelum server siap
+    print("[SYSTEM] 🔄 Menjalankan sinkronisasi katalog awal...")
+    try:
+        run_all_sync()
+        print("[SYSTEM] ✅ Sinkronisasi katalog awal selesai!")
+    except Exception as e:
+        print(f"[SYSTEM] ⚠️ Sinkronisasi awal gagal (server tetap jalan): {e}")
+    
     print("[SYSTEM] ⏰ Menjalankan tugas Garbage Collector (Jam 03:00 pagi)...")
     scheduler.add_job(
         bersihkan_memori_langgraph, 
         'cron', 
         hour=3, 
         minute=0,
-        id='hapus_memori_langgraph',  # Sabuk pengaman agar tidak ganda
-        replace_existing=True         # Timpa jadwal lama jika server direstart
+        id='hapus_memori_langgraph',
+        replace_existing=True
     )
     
-    print("[SYSTEM] ⏰ Menyalakan Background Scheduler (Katalog Sync)...")
+    print("[SYSTEM] ⏰ Menyalakan Background Scheduler (Katalog Sync setiap 7 hari)...")
     scheduler.start()
     
     print("[SYSTEM] ✅ Otak AI & Scheduler Siap Melayani!\n")
@@ -146,7 +153,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Aire Optima AI API", lifespan=lifespan)
 
-@app.post("/webhook")
+@app.post("/waha")
 async def terima_pesan_waha(request: Request):
     try:
         data = await request.json()
@@ -268,7 +275,7 @@ class ChatResponse(BaseModel):
     reply: str
     blocked: bool = False  # True jika ditolak moderasi
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/web", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
     """
     Endpoint universal untuk chatbot website atau platform lain.
@@ -351,4 +358,6 @@ async def chat_endpoint(request: ChatRequest):
         )
 
 if __name__ == "__main__":
-    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
+    import os
+    os.environ["PYTHONUNBUFFERED"] = "1"
+    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=False)

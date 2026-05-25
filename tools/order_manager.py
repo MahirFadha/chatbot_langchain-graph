@@ -4,6 +4,58 @@ from data.database import get_db_connection
 from services.waha_services import kirim_notifikasi_admin
 import datetime
 
+
+@tool
+def cek_status_pesanan(order_id: str, config: RunnableConfig) -> str:
+    """
+    Gunakan tool ini untuk mengecek status dan detail pesanan pelanggan berdasarkan Nomor Order.
+    Tool ini WAJIB dipanggil sebelum melakukan reschedule atau cancel untuk memverifikasi jadwal awal.
+    """
+    id_customer_aktif = config.get("configurable", {}).get("thread_id")
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT o.order_id, o.order_status, o.request_service_time, o.total_price, 
+                   o.created_at, c.real_name
+            FROM public.orders o
+            JOIN public.customers c ON o.id_customer = c.id_customer
+            WHERE o.order_id = %s AND o.id_customer = %s
+        """, (order_id, id_customer_aktif))
+        row = cursor.fetchone()
+        
+        cursor.close()
+        conn.close()
+        
+        if not row:
+            return f"GAGAL: Nomor Order '{order_id}' tidak ditemukan atau bukan milik pelanggan ini."
+        
+        order_id_db = row[0]
+        status = row[1] or "pending"
+        jadwal = row[2]
+        total_harga = row[3] or 0
+        created_at = row[4]
+        nama = row[5] or "Pelanggan"
+        
+        # Format jadwal untuk dibaca AI
+        jadwal_str = str(jadwal) if jadwal else "Belum ditentukan"
+        created_str = str(created_at) if created_at else "-"
+        
+        return (
+            f"DATA PESANAN DITEMUKAN:\n"
+            f"- Order ID: {order_id_db}\n"
+            f"- Nama Pelanggan: {nama}\n"
+            f"- Status: {status}\n"
+            f"- Jadwal Pengerjaan: {jadwal_str}\n"
+            f"- Total Harga: Rp{total_harga}\n"
+            f"- Dibuat Pada: {created_str}"
+        )
+        
+    except Exception as e:
+        return f"GAGAL: Terjadi kesalahan sistem: {e}"
+
 @tool
 def catat_pesanan_baru(
     nama_asli: str, 
@@ -77,7 +129,6 @@ def catat_pesanan_baru(
         # ======================================================
         jadwal_tampil = jadwal # Default jika error
         try:
-            import datetime
             dt = datetime.datetime.strptime(jadwal, "%Y-%m-%d %H:%M:%S")
             hari_indo = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
             nama_hari = hari_indo[dt.weekday()]

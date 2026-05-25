@@ -33,7 +33,7 @@ def waha_sedang_mengetik(chat_id):
         pass
 
 def waha_kirim_balasan(chat_id, teks_balasan):
-    """Mengirim pesan teks dari AI kembali ke WhatsApp pelanggan"""
+    """Mengirim pesan teks dari AI kembali ke WhatsApp"""
     try:
         response = requests.post(
             f"{WAHA_URL}/api/sendText", 
@@ -42,14 +42,23 @@ def waha_kirim_balasan(chat_id, teks_balasan):
                 "text": teks_balasan,
                 "session": WAHA_SESSION
             },
-            headers=get_headers() # <-- SISIPKAN KUNCI DI SINI
+            headers=get_headers()
         )
         
         # Cek penolakan WAHA
         if response.status_code not in [200, 201]:
             print(f"❌ [WAHA MENOLAK] Kode: {response.status_code} | Alasan: {response.text}")
         else:
-            print("✅ [WAHA SUKSES] Pesan terkirim ke WhatsApp pelanggan!")
+            # Deteksi apakah ini kirim ke admin atau pelanggan
+            from config.settings import NOMOR_WA
+            admin_id = str(NOMOR_WA).strip()
+            if admin_id.startswith("0"): admin_id = "62" + admin_id[1:]
+            if not admin_id.endswith("@c.us"): admin_id += "@c.us"
+            
+            if chat_id == admin_id:
+                print("✅ [WAHA SUKSES] Notifikasi terkirim ke Admin!")
+            else:
+                print("✅ [WAHA SUKSES] Pesan terkirim ke WhatsApp pelanggan!")
             
     except Exception as e:
         print(f"❌ [ERROR KONEKSI WAHA] Gagal mengirim pesan: {e}")

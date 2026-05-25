@@ -108,7 +108,7 @@ def setup_katalog_chroma():
                     info_bundling = f"Jasa Bundling/Pemasangan Wajib: {srvc_name} (Biaya Tambahan Jasa: Rp{harga_jasa}). "
                 
                 teks_gabungan = (
-                    f"Nama Produk: {prod_name}. "
+                    f"passage: Nama Produk: {prod_name}. "
                     f"Kategori: {nmjens}. "
                     f"Merek: {nmmerk}. "
                     f"Harga Unit Produk: Rp{price}. "
@@ -142,7 +142,7 @@ def setup_katalog_chroma():
                 srvc_desc = row[3] or ""
 
                 teks_jasa = (
-                    f"Nama Layanan: {srvc_name}. "
+                    f"passage: Nama Layanan: {srvc_name}. "
                     f"Kategori: Jasa. "
                     f"Harga Dasar: Rp{base_price}. "
                     f"Keterangan Layanan: {srvc_desc}."

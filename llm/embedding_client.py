@@ -8,9 +8,8 @@ def get_embedding_model():
     # Jika model belum pernah di-load, maka load sekarang
     if _embedding_model is None:
         _embedding_model = HuggingFaceEmbeddings(
-            # model_name="paraphrase-multilingual-mpnet-base-v2"
             model_name="intfloat/multilingual-e5-base",
-            model_kwargs={"device": "gpu"},
+            model_kwargs={"device": "cuda"},
             encode_kwargs={"normalize_embeddings": True}
         )
     return _embedding_model
